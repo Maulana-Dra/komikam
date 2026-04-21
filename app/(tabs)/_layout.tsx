@@ -1,3 +1,25 @@
+// Patch untuk: Cannot read properties of null (reading 'dispatchEvent')
+// Terjadi di Expo Router saat History.pushState dipanggil di Android web mode
+if (typeof window !== "undefined" && window.history) {
+  const originalPushState = window.history.pushState.bind(window.history);
+  window.history.pushState = function (...args) {
+    try {
+      originalPushState(...args);
+    } catch (e) {
+      // Abaikan error dispatchEvent null — route tetap jalan
+    }
+  };
+
+  const originalReplaceState = window.history.replaceState.bind(window.history);
+  window.history.replaceState = function (...args) {
+    try {
+      originalReplaceState(...args);
+    } catch (e) {
+      // Sama untuk replaceState
+    }
+  };
+}
+
 import { Tabs } from "expo-router";
 import React from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";

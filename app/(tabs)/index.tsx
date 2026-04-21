@@ -9,7 +9,8 @@ import {
   Pressable,
   RefreshControl,
   TextInput,
-  View,
+  useWindowDimensions,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,8 +26,10 @@ import {
 import type { ShngmManga } from "@/src/api/shngmTypes";
 import { getAllHistory, type ReadingProgress } from "@/src/store/history";
 
+import HeroCarousel from "@/components/home/HeroCarousel";
 import RecommendedSection from "@/components/home/RecommendedSection";
 import { useAppTheme } from "@/src/theme/ThemeContext";
+import Ionicons from "@expo/vector-icons/build/Ionicons";
 
 type FeedState = {
   items: ShngmManga[];
@@ -74,6 +77,8 @@ export default function HomeScreen() {
   const { resolved, setMode } = useAppTheme();
   const isDark = resolved === "dark";
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
   const toMangaParams = React.useCallback(
     (item: ShngmManga) => ({
       mangaId: item.manga_id,
@@ -111,6 +116,7 @@ export default function HomeScreen() {
   const [recFilter, setRecFilter] = React.useState<MangaFormat>("manhwa");
   const [queryInput, setQueryInput] = React.useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = React.useState<string>("");
+  const [isGrid, setIsGrid] = React.useState(true);
 
   const [feeds, setFeeds] = React.useState<Record<FeedType, FeedState>>({
     project: {
@@ -450,6 +456,22 @@ export default function HomeScreen() {
   const isSearching = debouncedQuery.trim().length > 0;
   const hero = filtered.slice(0, 3);
 
+  const numColumns = isGrid ? (isDesktop ? (width >= 1024 ? 6 : 4) : 2) : 1;
+
+  const groupedData = React.useMemo(() => {
+    if (numColumns === 1) {
+      return filtered.map((item) => ({ id: item.manga_id, items: [item] }));
+    }
+    const result = [];
+    for (let i = 0; i < filtered.length; i += numColumns) {
+      result.push({
+        id: `row-${i}`,
+        items: filtered.slice(i, i + numColumns),
+      });
+    }
+    return result;
+  }, [filtered, numColumns]);
+
   const [banner, setBanner] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -511,7 +533,12 @@ export default function HomeScreen() {
     };
   }, [useServerSearch, debouncedQuery, active, searchNonce]);
 
-  
+  // Helper — taruh di dalam komponen, sebelum JSX
+  const handleToggleLayout = (toGrid: boolean) => {
+    if (toGrid === isGrid) return;
+    setIsGrid(toGrid);
+  };
+
   const Segmented = (
     <View
       style={{
@@ -522,7 +549,6 @@ export default function HomeScreen() {
         backgroundColor: colors.bg,
       }}
     >
-
       {offline ? (
         <Animated.View
           style={{
@@ -919,6 +945,20 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
+      {/* Hero */}
+      {!isSearching && hero.length > 0 ? (
+        <HeroCarousel
+          items={hero}
+          colors={colors}
+          onPressItem={(item) =>
+            router.push({
+              pathname: "/manga/[mangaId]",
+              params: toMangaParams(item),
+            })
+          }
+        />
+      ) : null}
+
       {/* Continue reading */}
       {!isSearching && (recentLoading || recent.length > 0) ? (
         <View style={{ paddingHorizontal: 12, marginBottom: 14 }}>
@@ -975,7 +1015,9 @@ export default function HomeScreen() {
                 const page = item.pageIndex + 1;
                 const total = item.totalPages || 0;
                 const pct =
-                  total > 0 ? Math.min(100, Math.round((page / total) * 100)) : 0;
+                  total > 0
+                    ? Math.min(100, Math.round((page / total) * 100))
+                    : 0;
 
                 return (
                   <View style={{ width: 220 }}>
@@ -1074,76 +1116,6 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* Hero */}
-      {!isSearching && hero.length > 0 ? (
-        <View style={{ paddingHorizontal: 12, marginBottom: 14 }}>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "900",
-              color: colors.text,
-              marginBottom: 10,
-            }}
-          >
-            Hero
-          </Text>
-          <FlatList
-            data={hero}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(it) => it.manga_id}
-            contentContainerStyle={{ gap: 12 }}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/manga/[mangaId]",
-                    params: toMangaParams(item),
-                  })
-                }
-                style={{ width: 280 }}
-              >
-                <View
-                  style={{
-                    borderRadius: 18,
-                    overflow: "hidden",
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    backgroundColor: colors.card,
-                  }}
-                >
-                  <Image
-                    source={{
-                      uri: item.cover_image_url || item.cover_portrait_url,
-                    }}
-                    style={{
-                      width: "100%",
-                      height: 150,
-                      backgroundColor: colors.chip,
-                    }}
-                  />
-                  <View style={{ padding: 12, gap: 6 }}>
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        fontWeight: "900",
-                        color: colors.text,
-                        fontSize: 16,
-                      }}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text numberOfLines={2} style={{ color: colors.subtext }}>
-                      {item.description}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
-            )}
-          />
-        </View>
-      ) : null}
-
       {/* Recommended 3 format */}
       {!isSearching ? (
         <View style={{ paddingHorizontal: 12 }}>
@@ -1159,7 +1131,7 @@ export default function HomeScreen() {
           </Text>
           {/* 🔹 FILTER BUTTON */}
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-            {([ "manhwa", "manga", "manhua"] as const).map((t) => {
+            {(["manhwa", "manga", "manhua"] as const).map((t) => {
               const selected = recFilter === t;
               return (
                 <Pressable
@@ -1169,7 +1141,9 @@ export default function HomeScreen() {
                     paddingVertical: 8,
                     paddingHorizontal: 12,
                     borderRadius: 999,
-                    backgroundColor: selected ? colors.activePillBg : colors.card,
+                    backgroundColor: selected
+                      ? colors.activePillBg
+                      : colors.card,
                     borderWidth: 1,
                     borderColor: colors.border,
                   }}
@@ -1244,19 +1218,19 @@ export default function HomeScreen() {
               )}
 
               {recFilter === "manga" && (
-              <RecommendedSection
-                title=""
-                items={rec.manga}
-                isDark={isDark}
-              />
+                <RecommendedSection
+                  title=""
+                  items={rec.manga}
+                  isDark={isDark}
+                />
               )}
 
               {recFilter === "manhua" && (
-              <RecommendedSection
-                title=""
-                items={rec.manhua}
-                isDark={isDark}
-              />
+                <RecommendedSection
+                  title=""
+                  items={rec.manhua}
+                  isDark={isDark}
+                />
               )}
             </>
           )}
@@ -1264,11 +1238,21 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={{ paddingHorizontal: 12, marginTop: 6, marginBottom: 10 }}>
-        <Text style={{ fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 10}}>
+        {/* Title */}
+        <Text
+          style={{
+            fontSize: 16,
+            fontWeight: "900",
+            color: colors.text,
+            marginBottom: 10,
+          }}
+        >
           {isSearching
             ? "Hasil Pencarian"
             : `Latest Updates (${active === "project" ? "Project" : "Mirror"})`}
         </Text>
+
+        {/* ROW: LEFT (Project/Mirror) + RIGHT (View Toggle) */}
         <View
           style={{
             flexDirection: "row",
@@ -1276,44 +1260,91 @@ export default function HomeScreen() {
             justifyContent: "space-between",
           }}
         >
-        {(["project", "mirror"] as const).map((t) => {
-        const selected = active === t;
-        return (
-          <Pressable
-            key={t}
-            onPress={() => setActive(t)}
+          {/* 🔹 LEFT: Project / Mirror */}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {(["project", "mirror"] as const).map((t) => {
+              const selected = active === t;
+              return (
+                <Pressable
+                  key={t}
+                  onPress={() => setActive(t)}
+                  style={{
+                    paddingVertical: 9,
+                    paddingHorizontal: 12,
+                    borderRadius: 999,
+                    backgroundColor: selected
+                      ? colors.activePillBg
+                      : colors.chip,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: selected ? colors.activePillText : colors.subtext,
+                      fontWeight: "900",
+                    }}
+                  >
+                    {t === "project" ? "Project" : "Mirror"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* 🔹 RIGHT: Grid / List Toggle */}
+          <View
             style={{
-              paddingVertical: 9,
-              paddingHorizontal: 12,
-              borderRadius: 999,
-              backgroundColor: selected ? colors.activePillBg : colors.chip,
+              flexDirection: "row",
+              backgroundColor: colors.card,
+              borderRadius: 10,
               borderWidth: 1,
               borderColor: colors.border,
+              padding: 4,
             }}
           >
-            <Text
+            {/* Grid */}
+            <Pressable
+              onPress={() => handleToggleLayout(true)}
               style={{
-                color: selected ? colors.activePillText : colors.subtext,
-                fontWeight: "900",
+                padding: 6,
+                borderRadius: 6,
+                backgroundColor: isGrid ? colors.activePillBg : "transparent",
               }}
             >
-              {t === "project" ? "Project" : "Mirror"}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <Ionicons
+                name="grid-outline"
+                size={16}
+                color={isGrid ? colors.activePillText : colors.subtext}
+              />
+            </Pressable>
 
-      <View style={{ flex: 1 }} />
+            {/* List */}
+            <Pressable
+              onPress={() => handleToggleLayout(false)}
+              style={{
+                padding: 6,
+                borderRadius: 6,
+                backgroundColor: !isGrid ? colors.activePillBg : "transparent",
+              }}
+            >
+              <Ionicons
+                name="list-outline"
+                size={16}
+                color={!isGrid ? colors.activePillText : colors.subtext}
+              />
+            </Pressable>
+          </View>
+        </View>
       </View>
-    </View>
     </View>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <FlatList
-        data={filtered}
-        keyExtractor={(it) => it.manga_id}
+        data={groupedData}
+        keyExtractor={(it) => it.id}
         ListHeaderComponent={Header}
         contentContainerStyle={{
           paddingBottom: 24,
@@ -1370,100 +1401,187 @@ export default function HomeScreen() {
             )}
           </View>
         }
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: "/manga/[mangaId]",
-                params: toMangaParams(item),
-              })
-            }
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.85 : 1,
-              marginBottom: 12,
+        renderItem={({ item: row }) => (
+          <View style={{ flexDirection: "row", gap: isGrid ? 8 : 0 }}>
+            {row.items.map((item) => {
+              if (!isGrid) {
+                return (
+                  <Pressable
+                    key={item.manga_id}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/manga/[mangaId]",
+                        params: toMangaParams(item),
+                      })
+                    }
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      opacity: pressed ? 0.85 : 1,
+                      marginBottom: 12,
+                    })}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: colors.card,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        borderRadius: 16,
+                        padding: 12,
+                        flexDirection: "row",
+                        gap: 12,
+                      }}
+                    >
+                      <Image
+                        source={{
+                          uri: item.cover_portrait_url || item.cover_image_url,
+                        }}
+                        style={{
+                          width: 72,
+                          height: 96,
+                          borderRadius: 14,
+                          backgroundColor: colors.chip,
+                        }}
+                      />
+
+                      <View style={{ flex: 1, gap: 6 }}>
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            fontSize: 16,
+                            fontWeight: "900",
+                            color: colors.text,
+                          }}
+                        >
+                          {item.title}
+                        </Text>
+
+                        <Text numberOfLines={2} style={{ color: colors.subtext }}>
+                          {item.description}
+                        </Text>
+
+                        <View
+                          style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                        >
+                          <View
+                            style={{
+                              backgroundColor: colors.chip,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                              paddingVertical: 6,
+                              paddingHorizontal: 10,
+                              borderRadius: 999,
+                            }}
+                          >
+                            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                              Rate {item.user_rate || 0}
+                            </Text>
+                          </View>
+
+                          <View
+                            style={{
+                              backgroundColor: colors.chip,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                              paddingVertical: 6,
+                              paddingHorizontal: 10,
+                              borderRadius: 999,
+                            }}
+                          >
+                            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                              Views {item.view_count.toLocaleString("id-ID")}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <IconSymbol
+                        name="chevron.right"
+                        size={18}
+                        color={colors.subtext}
+                      />
+                    </View>
+                  </Pressable>
+                );
+              }
+
+              return (
+                <Pressable
+                  key={item.manga_id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/manga/[mangaId]",
+                      params: toMangaParams(item),
+                    })
+                  }
+                  style={({ pressed }) => [
+                    {
+                      flex: 1,
+                      backgroundColor: colors.card,
+                      borderRadius: 12,
+                      overflow: "hidden",
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      marginBottom: 12,
+                    },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <View style={{ aspectRatio: 2 / 3, width: "100%", position: "relative" }}>
+                    <Image
+                      source={{
+                        uri: item.cover_portrait_url || item.cover_image_url,
+                      }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        backgroundColor: colors.chip,
+                      }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View style={{ padding: 8, gap: 4 }}>
+                    <Text
+                      numberOfLines={2}
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "900",
+                        color: colors.text,
+                      }}
+                    >
+                      {item.title}
+                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginTop: 4,
+                      }}
+                    >
+                      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "700" }}>
+                        Ch {item.latest_chapter_number || "-"}
+                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                        <IconSymbol name="eye" size={12} color={colors.subtext} />
+                        <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                          {item.view_count >= 1000000 
+                            ? (item.view_count / 1000000).toFixed(1) + "M"
+                            : item.view_count >= 1000
+                            ? (item.view_count / 1000).toFixed(1) + "K"
+                            : item.view_count}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              );
             })}
-          >
-            <View
-              style={{
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 16,
-                padding: 12,
-                flexDirection: "row",
-                gap: 12,
-              }}
-            >
-              <Image
-                source={{
-                  uri: item.cover_portrait_url || item.cover_image_url,
-                }}
-                style={{
-                  width: 72,
-                  height: 96,
-                  borderRadius: 14,
-                  backgroundColor: colors.chip,
-                }}
-              />
-
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text
-                  numberOfLines={2}
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "900",
-                    color: colors.text,
-                  }}
-                >
-                  {item.title}
-                </Text>
-
-                <Text numberOfLines={2} style={{ color: colors.subtext }}>
-                  {item.description}
-                </Text>
-
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                >
-                  <View
-                    style={{
-                      backgroundColor: colors.chip,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      borderRadius: 999,
-                    }}
-                  >
-                    <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                      Rate {item.user_rate || 0}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={{
-                      backgroundColor: colors.chip,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      borderRadius: 999,
-                    }}
-                  >
-                    <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                      Views {item.view_count.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <IconSymbol
-                name="chevron.right"
-                size={18}
-                color={colors.subtext}
-              />
-            </View>
-          </Pressable>
+            
+            {/* Pad the last row with empty views if it's a grid */}
+            {isGrid && Array.from({ length: numColumns - row.items.length }).map((_, i) => (
+              <View key={`empty-${i}`} style={{ flex: 1 }} />
+            ))}
+          </View>
         )}
       />
     </View>
