@@ -7,6 +7,7 @@ import {
   Animated,
   FlatList,
   Pressable,
+  ScrollView,
   TextInput,
   View,
   Image,
@@ -16,17 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useAppTheme } from "@/src/theme/ThemeContext";
-import { getChapterList, getMangaList } from "../../src/api/shngmClient";
+import { getChapterList, getMangaDetail } from "../../src/api/shngmClient";
 import type { ShngmChapter, ShngmManga } from "../../src/api/shngmTypes";
 import { isBookmarked, toggleBookmark } from "../../src/store/bookmarks";
 import { getLatestProgressByManga } from "../../src/store/history";
-
-// sementara cari manga dari list (karena belum ada endpoint detail manga by id)
-async function findMangaFromList(mangaId: string): Promise<ShngmManga | null> {
-  const res = await getMangaList({ page: 1, pageSize: 50 });
-  const found = res.data.find((m) => m.manga_id === mangaId);
-  return found ?? null;
-}
 
 type ResumeState = {
   chapterId: string;
@@ -178,6 +172,31 @@ export default function MangaDetailScreen() {
       ? state.manga.user_rate
       : routeUserRate;
 
+  // --- Helper format angka (1200 → "1.2K") ---
+  function formatCount(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+    return String(n);
+  }
+
+  // --- Derived metadata dari API detail ---
+  const displayMeta = React.useMemo(() => {
+    const m = state.manga;
+    if (!m) return null;
+    return {
+      genres:   (m.taxonomy.Genre  ?? []).filter((g) => g.name),
+      authors:  (m.taxonomy.Author ?? []).filter((a) => a.name),
+      artists:  (m.taxonomy.Artist ?? []).filter((a) => a.name),
+      formats:  (m.taxonomy.Format ?? []).filter((a) => a.name),
+      types:    (m.taxonomy.Type   ?? []).filter((a) => a.name),
+      status:   m.status,          // 1=Ongoing, 2=Completed, 0=Unknown
+      year:     m.release_year,
+      views:    m.view_count,
+      bookmarks: m.bookmark_count,
+    };
+  }, [state.manga]);
+
+
   React.useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 1800);
@@ -211,11 +230,11 @@ export default function MangaDetailScreen() {
     try {
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      const [manga, chapterRes] = await Promise.all([
-        findMangaFromList(id),
+      const [detailRes, chapterRes] = await Promise.all([
+        getMangaDetail(id),
         getChapterList({ mangaId: id, page: 1, pageSize: 20 }),
       ]);
-      console.log(manga, chapterRes);
+      const manga: ShngmManga = detailRes.data;
       setState((s) => ({
         ...s,
         manga,
@@ -695,43 +714,212 @@ export default function MangaDetailScreen() {
           </View>
         </View>
       </View>
-      <Pressable
-        onPress={async () => {
-          if (!id) return;
-          const cover = displayCover;
-          const next = await toggleBookmark({
-            mangaId: id,
-            title: displayTitle,
-            coverUrl: cover,
-          });
-          setBookmarked(next);
-          setToast(next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark");
-        }}
-        style={{
-          backgroundColor: bookmarked ? colors.ghost : colors.button,
-          paddingVertical: 12,
-          paddingHorizontal: 14,
-          borderRadius: 14,
-          borderWidth: bookmarked ? 1 : 0,
-          borderColor: bookmarked ? colors.border : "transparent",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <IconSymbol
-            name={bookmarked ? "bookmark.fill" : "bookmark"}
-            size={18}
-            color={bookmarked ? colors.ghostText : colors.buttonText}
-          />
-          <Text
-            style={{
-              color: bookmarked ? colors.ghostText : colors.buttonText,
-              fontWeight: "900",
-            }}
-          >
-            {bookmarked ? "Bookmarked" : "Bookmark"}
-          </Text>
+
+      {/* ── Metadata Section ── */}
+      {displayMeta && (
+        <View style={{ gap: 10 }}>
+
+          {/* Status + Release Year + Stats */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {/* Status badge */}
+            {displayMeta.status === 1 && (
+              <View style={{
+                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
+                backgroundColor: "rgba(52,199,89,0.15)",
+                borderWidth: 1, borderColor: "rgba(52,199,89,0.4)",
+              }}>
+                <Text style={{ color: "#34C759", fontWeight: "800", fontSize: 12 }}>Ongoing</Text>
+              </View>
+            )}
+            {displayMeta.status === 2 && (
+              <View style={{
+                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
+                backgroundColor: colors.chip,
+                borderWidth: 1, borderColor: colors.border,
+              }}>
+                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>Completed</Text>
+              </View>
+            )}
+            {/* Release year */}
+            {!!displayMeta.year && (
+              <View style={{
+                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
+                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
+                flexDirection: "row", alignItems: "center", gap: 5,
+              }}>
+                <IconSymbol name="calendar" size={12} color={colors.subtext} />
+                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{displayMeta.year}</Text>
+              </View>
+            )}
+            {/* View count */}
+            {displayMeta.views > 0 && (
+              <View style={{
+                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
+                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
+                flexDirection: "row", alignItems: "center", gap: 5,
+              }}>
+                <IconSymbol name="eye" size={12} color={colors.subtext} />
+                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{formatCount(displayMeta.views)}</Text>
+              </View>
+            )}
+            {/* Bookmark count */}
+            {displayMeta.bookmarks > 0 && (
+              <View style={{
+                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
+                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
+                flexDirection: "row", alignItems: "center", gap: 5,
+              }}>
+                <IconSymbol name="bookmark" size={12} color={colors.subtext} />
+                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{formatCount(displayMeta.bookmarks)}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Taxonomy Section matching image layout */}
+          <View style={{ gap: 12 }}>
+            {/* Row 1: Genre | Author */}
+            {(displayMeta.genres.length > 0 || displayMeta.authors.length > 0) && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
+                {displayMeta.genres.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Genre</Text>
+                    {displayMeta.genres.map((g) => (
+                      <View key={`g-${g.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{g.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {displayMeta.genres.length > 0 && displayMeta.authors.length > 0 && (
+                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
+                )}
+                {displayMeta.authors.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Author</Text>
+                    {displayMeta.authors.map((a) => (
+                      <View key={`a-${a.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{a.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
+            )}
+
+            {/* Row 2: Artist | Format | Type */}
+            {(displayMeta.artists.length > 0 || displayMeta.formats.length > 0 || displayMeta.types.length > 0) && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
+                {displayMeta.artists.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Artist</Text>
+                    {displayMeta.artists.map((a) => (
+                      <View key={`ar-${a.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{a.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {displayMeta.artists.length > 0 && (displayMeta.formats.length > 0 || displayMeta.types.length > 0) && (
+                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
+                )}
+                {displayMeta.formats.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Format</Text>
+                    {displayMeta.formats.map((f) => (
+                      <View key={`f-${f.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{f.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {displayMeta.formats.length > 0 && displayMeta.types.length > 0 && (
+                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
+                )}
+                {displayMeta.types.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Type</Text>
+                    {displayMeta.types.map((t) => (
+                      <View key={`t-${t.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{t.name}</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
+            )}
+          </View>
         </View>
-      </Pressable>
+      )}
+
+      <View style={{ flexDirection: "row", gap: 12 }}>
+        {/* Tombol Baca */}
+        <Pressable
+          onPress={() => {
+            const targetId = resume?.chapterId ?? state.manga?.latest_chapter_id;
+            if (targetId) {
+              router.push(`/reader/${targetId}`);
+            }
+          }}
+          style={{
+            flex: 1,
+            backgroundColor: colors.button,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <IconSymbol name="book.fill" size={18} color={colors.buttonText} />
+            <Text style={{ color: colors.buttonText, fontWeight: "900" }}>
+              {resume ? `Lanjut Ch. ${resume.chapterNumber}` : "Baca Terbaru"}
+            </Text>
+          </View>
+        </Pressable>
+
+        {/* Tombol Bookmark */}
+        <Pressable
+          onPress={async () => {
+            if (!id) return;
+            const cover = displayCover;
+            const next = await toggleBookmark({
+              mangaId: id,
+              title: displayTitle,
+              coverUrl: cover,
+            });
+            setBookmarked(next);
+            setToast(next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark");
+          }}
+          style={{
+            flex: 1,
+            backgroundColor: bookmarked ? colors.ghost : colors.chip,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: bookmarked ? colors.border : colors.border,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <IconSymbol
+              name={bookmarked ? "bookmark.fill" : "bookmark"}
+              size={18}
+              color={bookmarked ? colors.ghostText : colors.text}
+            />
+            <Text
+              style={{
+                color: bookmarked ? colors.ghostText : colors.text,
+                fontWeight: "900",
+              }}
+            >
+              {bookmarked ? "Bookmarked" : "Bookmark"}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
       <View
         style={{
           flexDirection: "row",

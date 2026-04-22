@@ -60,6 +60,17 @@ export type ShngmMangaListResponse = {
   facet: Record<string, unknown>; // facet besar dan dinamis, cukup unknown
 };
 
+export type ShngmMangaDetailResponse = {
+  retcode: number;
+  message: string;
+  meta: {
+    request_id: string;
+    timestamp: number;
+    process_time: string;
+  };
+  data: ShngmManga;
+};
+
 export type ShngmChapter = {
   chapter_id: string;
   manga_id: string;

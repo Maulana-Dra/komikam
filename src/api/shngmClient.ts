@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {
   ShngmChapterDetailResponse,
   ShngmChapterListResponse,
+  ShngmMangaDetailResponse,
   ShngmMangaListResponse,
 } from "./shngmTypes";
 
@@ -169,6 +170,9 @@ export type MangaListParams = {
   sort?: "latest";
   sortOrder?: "asc" | "desc";
   query?: string;
+  format?: "manhwa" | "manga" | "manhua";
+  status?: "1" | "2";
+  genre?: string;
 };
 
 function toQuery(
@@ -216,6 +220,9 @@ export async function getMangaListByType(
   if (params.sort) qs.set("sort", params.sort);
   if (params.sortOrder) qs.set("sort_order", params.sortOrder);
   if (params.query) qs.set("query", params.query);
+  if (params.format) qs.set("format", params.format);
+  if (params.status) qs.set("status", params.status);
+  if (params.genre) qs.set("genre", params.genre);
 
   const url = `${BASE_URL}/v1/manga/list?${qs.toString()}`;
   const json = await fetchJson<ShngmMangaListResponse>(url, {
@@ -223,7 +230,6 @@ export async function getMangaListByType(
     cacheMode: options?.cacheMode,
   });
   if (json.retcode !== 0) throw new ApiError(200, json.message || "API error");
-  console.log(json);
   return json;
 }
 
@@ -277,6 +283,21 @@ export async function getChapterDetail(
   const url = `${BASE_URL}/v1/chapter/detail/${encodeURIComponent(chapterId)}`;
   const json = await fetchJson<ShngmChapterDetailResponse>(url, {
     cacheTtlMs: CHAPTER_CACHE_TTL_MS,
+  });
+  if (json.retcode !== 0)
+    throw new ApiError(200, json.message || "API retcode not 0");
+
+  return json;
+}
+
+export async function getMangaDetail(
+  mangaId: string,
+  options?: { cacheMode?: FetchOptions["cacheMode"] },
+): Promise<ShngmMangaDetailResponse> {
+  const url = `${BASE_URL}/v1/manga/detail/${encodeURIComponent(mangaId)}`;
+  const json = await fetchJson<ShngmMangaDetailResponse>(url, {
+    cacheTtlMs: LIST_CACHE_TTL_MS,
+    cacheMode: options?.cacheMode,
   });
   if (json.retcode !== 0)
     throw new ApiError(200, json.message || "API retcode not 0");

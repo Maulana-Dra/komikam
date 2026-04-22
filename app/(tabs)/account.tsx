@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, Alert, Pressable, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, TextInput, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/ui/app-text";
@@ -12,6 +12,7 @@ import {
   syncUpload,
   type AccountProfile,
 } from "@/src/store/account";
+import { getReaderSettings, setReaderSettings, type ReaderSettings } from "@/src/store/readerSettings";
 
 function formatTime(ts?: number): string {
   if (!ts) return "-";
@@ -48,17 +49,26 @@ export default function AccountScreen() {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [syncing, setSyncing] = React.useState<boolean>(false);
   const [message, setMessage] = React.useState<string | null>(null);
+  
+  const [settings, setSettings] = React.useState<ReaderSettings>({ imageQuality: "high", readerBg: "black" });
 
   const load = React.useCallback(async () => {
     setLoading(true);
     const p = await getProfile();
     setProfile(p);
+    const s = await getReaderSettings();
+    setSettings(s);
     setLoading(false);
   }, []);
 
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const updateSetting = React.useCallback(async (partial: Partial<ReaderSettings>) => {
+    const next = await setReaderSettings(partial);
+    setSettings(next);
+  }, []);
 
   const handleSignIn = React.useCallback(async () => {
     if (!name.trim()) {
@@ -129,7 +139,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg, padding: 16, paddingTop: insets.top + 12, gap: 12 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, paddingTop: insets.top + 12, gap: 12, paddingBottom: insets.bottom + 40 }}>
       <Text style={{ color: colors.text, fontWeight: "900", fontSize: 20 }}>Akun</Text>
 
       {message ? (
@@ -261,6 +271,80 @@ export default function AccountScreen() {
           </Pressable>
         </View>
       )}
-    </View>
+
+      {/* Pembatas */}
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 12 }} />
+
+      {/* Pengaturan Baca */}
+      <View style={{ gap: 16 }}>
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>Pengaturan Baca</Text>
+        
+        {/* Image Quality */}
+        <View>
+          <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>Kualitas Gambar</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {(["high", "low"] as const).map((q) => (
+              <Pressable
+                key={q}
+                onPress={() => updateSetting({ imageQuality: q })}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderRadius: 10,
+                  backgroundColor: settings.imageQuality === q ? colors.text : colors.card,
+                  borderWidth: 1,
+                  borderColor: settings.imageQuality === q ? colors.text : colors.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: settings.imageQuality === q ? colors.bg : colors.subtext,
+                    fontWeight: settings.imageQuality === q ? "900" : "600",
+                  }}
+                >
+                  {q === "high" ? "High (HQ)" : "Low (Data Saver)"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        {/* Reader Background */}
+        <View>
+          <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>Warna Latar (Background)</Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {[
+              { val: "black", label: "Hitam", color: "#000" },
+              { val: "dark", label: "Gelap", color: "#121218" },
+              { val: "white", label: "Putih", color: "#FFF", txtColor: "#000" },
+            ].map((bg) => (
+              <Pressable
+                key={bg.val}
+                onPress={() => updateSetting({ readerBg: bg.val as any })}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderRadius: 10,
+                  backgroundColor: bg.color,
+                  borderWidth: 2,
+                  borderColor: settings.readerBg === bg.val ? (isDark ? "#4A90E2" : "#005bb5") : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: bg.txtColor || "#FFF",
+                    fontWeight: settings.readerBg === bg.val ? "900" : "600",
+                  }}
+                >
+                  {bg.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </View>
+    </ScrollView>
   );
 }

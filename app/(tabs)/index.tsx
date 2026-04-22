@@ -1355,6 +1355,8 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={activeFeed.refreshing}
             onRefresh={() => void refreshActive()}
+            tintColor={isDark ? "#F2F2F7" : "#1E2329"}
+            colors={[isDark ? "#F2F2F7" : "#1E2329"]}
           />
         }
         onEndReachedThreshold={0.6}

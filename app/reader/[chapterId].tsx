@@ -17,6 +17,8 @@ import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getChapterDetail } from "../../src/api/shngmClient";
 import { getLatestProgressByManga, upsertProgress } from "../../src/store/history";
+import { getReaderSettings, setReaderSettings, ReaderSettings } from "../../src/store/readerSettings";
+import type { ShngmChapterDetailData } from "../../src/api/shngmTypes";
 
 type PageItem = {
   key: string;
@@ -31,7 +33,7 @@ function joinUrl(baseUrl: string, path: string, filename: string): string {
   return `${b}${pp}${filename}`;
 }
 
-function PageImage({ uri, onSingleTap }: { uri: string; onSingleTap: () => void }) {
+function PageImage({ uri, onSingleTap, bg }: { uri: string; onSingleTap: () => void; bg: string }) {
   const screenW = Dimensions.get("window").width;
   const [height, setHeight] = React.useState<number>(screenW * 1.4);
   const lastTapRef = React.useRef<number>(0);
@@ -99,7 +101,7 @@ function PageImage({ uri, onSingleTap }: { uri: string; onSingleTap: () => void 
         style={{
           width: screenW,
           height,
-          backgroundColor: "#000",
+          backgroundColor: bg,
           overflow: "hidden",
         }}
       >
@@ -156,7 +158,7 @@ export default function ReaderScreen() {
   );
 
   const [title, setTitle] = React.useState<string>("Reader");
-  const [pages, setPages] = React.useState<PageItem[]>([]);
+  const [chapterData, setChapterData] = React.useState<ShngmChapterDetailData | null>(null);
   const [prevId, setPrevId] = React.useState<string | null>(null);
   const [nextId, setNextId] = React.useState<string | null>(null);
   const [mangaId, setMangaId] = React.useState<string>("");
@@ -178,6 +180,41 @@ export default function ReaderScreen() {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Settings state
+  const [settings, setSettings] = React.useState<ReaderSettings>({ imageQuality: "high", readerBg: "black" });
+  const [settingsVisible, setSettingsVisible] = React.useState(false);
+  const settingsAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    void getReaderSettings().then(setSettings);
+  }, []);
+
+  const updateSetting = React.useCallback(async (partial: Partial<ReaderSettings>) => {
+    const next = await setReaderSettings(partial);
+    setSettings(next);
+  }, []);
+
+  const toggleSettings = React.useCallback(() => {
+    const next = !settingsVisible;
+    setSettingsVisible(next);
+    Animated.timing(settingsAnim, {
+      toValue: next ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [settingsVisible, settingsAnim]);
+
+  const pages = React.useMemo(() => {
+    if (!chapterData) return [];
+    const base = settings.imageQuality === "low" ? chapterData.base_url_low : chapterData.base_url;
+    const path = chapterData.chapter.path;
+    return chapterData.chapter.data.map((filename, idx) => ({
+      key: `${chapterData.chapter_id}:${idx}:${filename}`,
+      index: idx,
+      url: joinUrl(base, path, filename),
+    }));
+  }, [chapterData, settings.imageQuality]);
+
   const load = React.useCallback(async () => {
     if (!id) return;
 
@@ -198,18 +235,13 @@ export default function ReaderScreen() {
       const base = d.base_url;
       const path = d.chapter.path;
 
-      const mapped: PageItem[] = d.chapter.data.map((filename, idx) => ({
-        key: `${d.chapter_id}:${idx}:${filename}`,
-        index: idx,
-        url: joinUrl(base, path, filename),
-      }));
+      setChapterData(d);
 
       setCurrentIndex(0);
       setScrubIndex(null);
       scrubIndexRef.current = null;
       setResumeIndex(null);
       setResumeVisible(false);
-      setPages(mapped);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setError(msg);
@@ -449,6 +481,22 @@ export default function ReaderScreen() {
           </View>
 
           <View style={{ flexDirection: "row", gap: 10 }}>
+            {/* Settings Button */}
+            <Pressable
+              onPress={toggleSettings}
+              style={({ pressed }) => ({
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                borderRadius: 10,
+                backgroundColor: colors.headerBtn,
+                opacity: pressed ? 0.85 : 1,
+                justifyContent: "center",
+                alignItems: "center",
+              })}
+            >
+              <Text style={{ fontSize: 16 }}>⚙️</Text>
+            </Pressable>
+
             <Pressable
               disabled={!prevId}
               onPress={() =>
@@ -505,7 +553,13 @@ export default function ReaderScreen() {
         ref={listRef}
         data={pages}
         keyExtractor={(it) => it.key}
-        renderItem={({ item }) => <PageImage uri={item.url} onSingleTap={handleToggleControls} />}
+        renderItem={({ item }) => (
+          <PageImage
+            uri={item.url}
+            onSingleTap={handleToggleControls}
+            bg={settings.readerBg === "white" ? "#FFF" : settings.readerBg === "dark" ? "#121218" : "#000"}
+          />
+        )}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
         initialNumToRender={3}
@@ -633,6 +687,107 @@ export default function ReaderScreen() {
               }}
             />
           </View>
+        </View>
+      )}
+
+      {/* Settings Panel Overlay */}
+      {settingsVisible && (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}>
+          <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }} onPress={toggleSettings} />
+          <Animated.View
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: colors.header,
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              padding: 20,
+              paddingBottom: insets.bottom + 20,
+              transform: [
+                {
+                  translateY: settingsAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [300, 0],
+                  }),
+                },
+              ],
+            }}
+          >
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <Text style={{ color: colors.text, fontSize: 18, fontWeight: "900" }}>Pengaturan Baca</Text>
+              <Pressable onPress={toggleSettings}>
+                <Text style={{ color: colors.subtext, fontSize: 20, fontWeight: "900" }}>✕</Text>
+              </Pressable>
+            </View>
+
+            <View style={{ gap: 20 }}>
+              {/* Image Quality */}
+              <View>
+                <Text style={{ color: colors.text, fontWeight: "700", marginBottom: 10 }}>Kualitas Gambar</Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {(["high", "low"] as const).map((q) => (
+                    <Pressable
+                      key={q}
+                      onPress={() => updateSetting({ imageQuality: q })}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        alignItems: "center",
+                        borderRadius: 10,
+                        backgroundColor: settings.imageQuality === q ? colors.text : colors.headerBtn,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: settings.imageQuality === q ? colors.bg : colors.subtext,
+                          fontWeight: settings.imageQuality === q ? "900" : "600",
+                        }}
+                      >
+                        {q === "high" ? "High (HQ)" : "Low (Data Saver)"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Reader Background */}
+              <View>
+                <Text style={{ color: colors.text, fontWeight: "700", marginBottom: 10 }}>Warna Latar (Background)</Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {[
+                    { val: "black", label: "Hitam", color: "#000" },
+                    { val: "dark", label: "Gelap", color: "#121218" },
+                    { val: "white", label: "Putih", color: "#FFF", txtColor: "#000" },
+                  ].map((bg) => (
+                    <Pressable
+                      key={bg.val}
+                      onPress={() => updateSetting({ readerBg: bg.val as any })}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        alignItems: "center",
+                        borderRadius: 10,
+                        backgroundColor: bg.color,
+                        borderWidth: 2,
+                        borderColor: settings.readerBg === bg.val ? (isDark ? "#4A90E2" : "#005bb5") : "transparent",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: bg.txtColor || "#FFF",
+                          fontWeight: settings.readerBg === bg.val ? "900" : "600",
+                        }}
+                      >
+                        {bg.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </Animated.View>
         </View>
       )}
     </View>
