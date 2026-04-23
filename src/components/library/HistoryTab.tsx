@@ -8,17 +8,18 @@ import {
   FlatList,
   Pressable,
   View,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
-import { getMangaList } from "@/src/api/shngmClient";
+import { getMangaDetail } from "@/src/api/shngmClient";
 import type { ShngmManga } from "@/src/api/shngmTypes";
 import {
   clearHistory,
   getAllHistory,
-  upsertProgress,
+  replaceHistory,
   type ReadingProgress,
 } from "@/src/store/history";
 
@@ -33,10 +34,13 @@ type HistoryRow = {
   totalPages: number;
 };
 
-async function findMangaFromList(mangaId: string): Promise<ShngmManga | null> {
-  const res = await getMangaList({ page: 1, pageSize: 100 });
-  const found = res.data.find((m) => m.manga_id === mangaId);
-  return found ?? null;
+async function fetchMangaDetail(mangaId: string): Promise<ShngmManga | null> {
+  try {
+    const res = await getMangaDetail(mangaId);
+    return res.data;
+  } catch {
+    return null;
+  }
 }
 
 function formatTime(ts: number): string {
@@ -76,7 +80,7 @@ export function HistoryTab() {
 
     for (const h of history) {
       const hasMeta = Boolean(h.mangaTitle || h.coverUrl);
-      const manga = hasMeta ? null : await findMangaFromList(h.mangaId);
+      const manga = hasMeta ? null : await fetchMangaDetail(h.mangaId);
       out.push({
         mangaId: h.mangaId,
         title: h.mangaTitle ?? manga?.title ?? "Unknown",
@@ -118,48 +122,50 @@ export function HistoryTab() {
   );
 
   const onClearAll = React.useCallback(() => {
-    Alert.alert(
-      "Hapus history?",
-      "Semua riwayat bacaan akan dihapus.",
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            await clearHistory();
-            await load();
-          },
-        },
-      ]
-    );
+    const doClear = async () => {
+      await clearHistory();
+      await load();
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm("Hapus history?\nSemua riwayat bacaan akan dihapus.")) {
+        doClear();
+      }
+    } else {
+      Alert.alert(
+        "Hapus history?",
+        "Semua riwayat bacaan akan dihapus.",
+        [
+          { text: "Batal", style: "cancel" },
+          { text: "Hapus", style: "destructive", onPress: () => { doClear(); } },
+        ]
+      );
+    }
   }, [load]);
 
   const onRemoveOne = React.useCallback(
     (item: HistoryRow) => {
-      Alert.alert(
-        "Hapus item ini?",
-        `Hapus history untuk "${item.title}"?`,
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: "Hapus",
-            style: "destructive",
-            onPress: async () => {
-              const all = await getAllHistory();
-              const filtered = all.filter((x) => x.mangaId !== item.mangaId);
+      const doRemove = async () => {
+        const all = await getAllHistory();
+        const filtered = all.filter((x) => x.mangaId !== item.mangaId);
+        await replaceHistory(filtered);
+        await load();
+      };
 
-              await clearHistory();
-              for (let i = filtered.length - 1; i >= 0; i--) {
-                const p: ReadingProgress = filtered[i];
-                await upsertProgress(p);
-              }
-
-              await load();
-            },
-          },
-        ]
-      );
+      if (Platform.OS === "web") {
+        if (window.confirm(`Hapus item ini?\nHapus history untuk "${item.title}"?`)) {
+          doRemove();
+        }
+      } else {
+        Alert.alert(
+          "Hapus item ini?",
+          `Hapus history untuk "${item.title}"?`,
+          [
+            { text: "Batal", style: "cancel" },
+            { text: "Hapus", style: "destructive", onPress: () => { doRemove(); } },
+          ]
+        );
+      }
     },
     [load]
   );
@@ -253,29 +259,29 @@ export function HistoryTab() {
           contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
           renderItem={({ item }) => (
             <View style={{ marginBottom: 12 }}>
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/manga/[mangaId]",
-                    params: {
-                      mangaId: item.mangaId,
-                      title: item.title,
-                      coverUrl: item.coverUrl,
-                    },
-                  })
-                }
-                style={({ pressed }) => ({ opacity: pressed ? 0.86 : 1 })}
+              <View
+                style={{
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 16,
+                  padding: 12,
+                  flexDirection: "row",
+                  gap: 12,
+                }}
               >
-                <View
-                  style={{
-                    backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: 16,
-                    padding: 12,
-                    flexDirection: "row",
-                    gap: 12,
-                  }}
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/manga/[mangaId]",
+                      params: {
+                        mangaId: item.mangaId,
+                        title: item.title,
+                        coverUrl: item.coverUrl,
+                      },
+                    })
+                  }
+                  style={({ pressed }) => ({ opacity: pressed ? 0.86 : 1 })}
                 >
                   <ExpoImage
                     source={{ uri: item.coverUrl }}
@@ -289,8 +295,22 @@ export function HistoryTab() {
                     cachePolicy="disk"
                     transition={0}
                   />
+                </Pressable>
 
-                  <View style={{ flex: 1, gap: 8 }}>
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Pressable
+                    onPress={() =>
+                      router.push({
+                        pathname: "/manga/[mangaId]",
+                        params: {
+                          mangaId: item.mangaId,
+                          title: item.title,
+                          coverUrl: item.coverUrl,
+                        },
+                      })
+                    }
+                    style={({ pressed }) => ({ opacity: pressed ? 0.86 : 1, gap: 8 })}
+                  >
                     <Text
                       style={{ color: colors.text, fontWeight: "900" }}
                       numberOfLines={2}
@@ -333,8 +353,9 @@ export function HistoryTab() {
                         </Text>
                       </View>
                     </View>
+                  </Pressable>
 
-                    <View style={{ flexDirection: "row", gap: 10 }}>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
                       <Pressable
                         onPress={() =>
                           router.push({
@@ -371,10 +392,9 @@ export function HistoryTab() {
                           Hapus
                         </Text>
                       </Pressable>
-                    </View>
                   </View>
                 </View>
-              </Pressable>
+              </View>
             </View>
           )}
         />

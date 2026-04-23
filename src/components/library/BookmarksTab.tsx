@@ -2,7 +2,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, View, useWindowDimensions, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
@@ -86,33 +86,41 @@ export function BookmarksTab() {
 
   const handleRemove = React.useCallback(
     (item: BookmarkItem) => {
-      Alert.alert("Hapus bookmark?", item.title, [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Hapus",
-          style: "destructive",
-          onPress: async () => {
-            await removeBookmark(item.mangaId);
-            setItems((prev) => prev.filter((x) => x.mangaId !== item.mangaId));
-          },
-        },
-      ]);
+      const doDelete = async () => {
+        await removeBookmark(item.mangaId);
+        setItems((prev) => prev.filter((x) => x.mangaId !== item.mangaId));
+      };
+
+      if (Platform.OS === "web") {
+        if (window.confirm(`Hapus bookmark?\n${item.title}`)) {
+          doDelete();
+        }
+      } else {
+        Alert.alert("Hapus bookmark?", item.title, [
+          { text: "Batal", style: "cancel" },
+          { text: "Hapus", style: "destructive", onPress: () => { doDelete(); } },
+        ]);
+      }
     },
     [setItems]
   );
 
   const handleClearAll = React.useCallback(() => {
-    Alert.alert("Hapus semua bookmark?", "Tindakan ini tidak bisa dibatalkan.", [
-      { text: "Batal", style: "cancel" },
-      {
-        text: "Hapus semua",
-        style: "destructive",
-        onPress: async () => {
-          await clearBookmarks();
-          setItems([]);
-        },
-      },
-    ]);
+    const doClear = async () => {
+      await clearBookmarks();
+      setItems([]);
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm("Hapus semua bookmark?\nTindakan ini tidak bisa dibatalkan.")) {
+        doClear();
+      }
+    } else {
+      Alert.alert("Hapus semua bookmark?", "Tindakan ini tidak bisa dibatalkan.", [
+        { text: "Batal", style: "cancel" },
+        { text: "Hapus semua", style: "destructive", onPress: () => { doClear(); } },
+      ]);
+    }
   }, []);
 
   if (loading) {
@@ -285,30 +293,30 @@ export function BookmarksTab() {
         }
         renderItem={({ item }) => (
           <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/manga/[mangaId]",
-                  params: {
-                    mangaId: item.mangaId,
-                    title: item.title,
-                    coverUrl: item.coverUrl,
-                  },
-                })
-              }
-              style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                padding: 12,
+                flexDirection: "row",
+                gap: 12,
+                minHeight: 118,
+              }}
             >
-              <View
-                style={{
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  borderRadius: 16,
-                  padding: 12,
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 118,
-                }}
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/manga/[mangaId]",
+                    params: {
+                      mangaId: item.mangaId,
+                      title: item.title,
+                      coverUrl: item.coverUrl,
+                    },
+                  })
+                }
+                style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
               >
                 <ExpoImage
                   source={{ uri: item.coverUrl }}
@@ -317,31 +325,40 @@ export function BookmarksTab() {
                   cachePolicy="disk"
                   transition={0}
                 />
+              </Pressable>
 
-                <View style={{ flex: 1, gap: 6, justifyContent: "space-between" }}>
-                  <View style={{ gap: 6 }}>
-                    <Text style={{ color: colors.text, fontWeight: "900" }} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <Text style={{ color: colors.subtext }}>
-                      Disimpan: {new Date(item.updatedAt).toLocaleDateString("id-ID")}
-                    </Text>
-                  </View>
+              <View style={{ flex: 1, gap: 6, justifyContent: "space-between" }}>
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/manga/[mangaId]",
+                      params: {
+                        mangaId: item.mangaId,
+                        title: item.title,
+                        coverUrl: item.coverUrl,
+                      },
+                    })
+                  }
+                  style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1, gap: 6 })}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "900" }} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  <Text style={{ color: colors.subtext }}>
+                    Disimpan: {new Date(item.updatedAt).toLocaleDateString("id-ID")}
+                  </Text>
+                </Pressable>
 
                   <Pressable
                     hitSlop={8}
-                    onPress={(event) => {
-                      event.stopPropagation?.();
-                      handleRemove(item);
-                    }}
+                    onPress={() => handleRemove(item)}
                     style={{ alignSelf: "flex-start", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.ghost }}
                   >
                     <Text style={{ color: colors.danger, fontWeight: "900" }}>Hapus</Text>
                   </Pressable>
                 </View>
               </View>
-            </Pressable>
-          </View>
+            </View>
         )}
       />
     </View>

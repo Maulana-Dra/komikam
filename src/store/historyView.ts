@@ -1,4 +1,4 @@
-import { getMangaList } from "../api/shngmClient";
+import { getMangaDetail } from "../api/shngmClient";
 import type { ShngmManga } from "../api/shngmTypes";
 import { getAllProgress } from "./history"; // kamu perlu export ini dari store history kamu
 
@@ -14,10 +14,13 @@ export type HistoryItem = {
 };
 
 
-async function findMangaFromList(mangaId: string): Promise<ShngmManga | null> {
-  const res = await getMangaList({ page: 1, pageSize: 100 }); // biar lebih banyak ketemu
-  const found = res.data.find((m) => m.manga_id === mangaId);
-  return found ?? null;
+async function fetchMangaDetail(mangaId: string): Promise<ShngmManga | null> {
+  try {
+    const res = await getMangaDetail(mangaId);
+    return res.data;
+  } catch {
+    return null;
+  }
 }
 
 export async function getHistoryItems(): Promise<HistoryItem[]> {
@@ -28,7 +31,7 @@ export async function getHistoryItems(): Promise<HistoryItem[]> {
 
   const items: HistoryItem[] = [];
   for (const p of sorted) {
-    const manga = await findMangaFromList(p.mangaId);
+    const manga = await fetchMangaDetail(p.mangaId);
     items.push({
       mangaId: p.mangaId,
       title: manga?.title ?? "Unknown",
