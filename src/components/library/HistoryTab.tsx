@@ -1,6 +1,7 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import {
   ActivityIndicator,
@@ -66,6 +67,8 @@ export function HistoryTab() {
       danger: isDark ? "#FF5C5C" : "#D32F2F",
       primary: isDark ? "#F2F2F7" : "#1E2A3A",
       primaryText: isDark ? "#111111" : "#F7F2EA",
+      button: isDark ? "#F2F2F7" : "#1E2329",
+      buttonText: isDark ? "#0B0B0E" : "#F6F1E9",
     }),
     [isDark]
   );
@@ -247,10 +250,56 @@ export function HistoryTab() {
       </View>
 
       {rows.length === 0 ? (
-        <View style={{ padding: 16 }}>
-          <Text style={{ color: colors.subtext }}>
-            Belum ada riwayat bacaan.
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingVertical: 60,
+            paddingHorizontal: 32,
+            gap: 16,
+          }}
+        >
+          <Ionicons
+            name="time-outline"
+            size={64}
+            color={colors.subtext}
+            style={{ opacity: 0.4 }}
+          />
+          <Text
+            style={{
+              color: colors.text,
+              fontWeight: "900",
+              fontSize: 18,
+              textAlign: "center",
+            }}
+          >
+            Belum ada riwayat baca
           </Text>
+          <Text
+            style={{
+              color: colors.subtext,
+              fontSize: 14,
+              textAlign: "center",
+              lineHeight: 20,
+            }}
+          >
+            Chapter yang sudah kamu baca akan tersimpan otomatis di sini.
+          </Text>
+          <Pressable
+            onPress={() => router.push("/")}
+            style={{
+              backgroundColor: colors.button,
+              borderRadius: 12,
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              marginTop: 8,
+            }}
+          >
+            <Text style={{ color: colors.buttonText, fontWeight: "900" }}>
+              Mulai Baca
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <FlatList

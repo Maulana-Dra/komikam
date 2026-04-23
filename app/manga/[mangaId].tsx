@@ -9,8 +9,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  View,
-  Image,
+  View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -53,21 +52,15 @@ function isOfflineError(err: unknown): boolean {
 }
 
 export default function MangaDetailScreen() {
-  const {
-    mangaId,
-    title,
-    description,
-    coverUrl,
-    countryId,
-    userRate,
-  } = useLocalSearchParams<{
-    mangaId: string;
-    title?: string;
-    description?: string;
-    coverUrl?: string;
-    countryId?: string;
-    userRate?: string;
-  }>();
+  const { mangaId, title, description, coverUrl, countryId, userRate } =
+    useLocalSearchParams<{
+      mangaId: string;
+      title?: string;
+      description?: string;
+      coverUrl?: string;
+      countryId?: string;
+      userRate?: string;
+    }>();
   const id = typeof mangaId === "string" ? mangaId : "";
 
   const router = useRouter();
@@ -174,7 +167,8 @@ export default function MangaDetailScreen() {
 
   // --- Helper format angka (1200 → "1.2K") ---
   function formatCount(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+    if (n >= 1_000_000)
+      return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
     return String(n);
   }
@@ -184,18 +178,17 @@ export default function MangaDetailScreen() {
     const m = state.manga;
     if (!m) return null;
     return {
-      genres:   (m.taxonomy.Genre  ?? []).filter((g) => g.name),
-      authors:  (m.taxonomy.Author ?? []).filter((a) => a.name),
-      artists:  (m.taxonomy.Artist ?? []).filter((a) => a.name),
-      formats:  (m.taxonomy.Format ?? []).filter((a) => a.name),
-      types:    (m.taxonomy.Type   ?? []).filter((a) => a.name),
-      status:   m.status,          // 1=Ongoing, 2=Completed, 0=Unknown
-      year:     m.release_year,
-      views:    m.view_count,
+      genres: (m.taxonomy.Genre ?? []).filter((g) => g.name),
+      authors: (m.taxonomy.Author ?? []).filter((a) => a.name),
+      artists: (m.taxonomy.Artist ?? []).filter((a) => a.name),
+      formats: (m.taxonomy.Format ?? []).filter((a) => a.name),
+      types: (m.taxonomy.Type ?? []).filter((a) => a.name),
+      status: m.status, // 1=Ongoing, 2=Completed, 0=Unknown
+      year: m.release_year,
+      views: m.view_count,
       bookmarks: m.bookmark_count,
     };
   }, [state.manga]);
-
 
   React.useEffect(() => {
     if (!toast) return;
@@ -319,7 +312,7 @@ export default function MangaDetailScreen() {
   const showDescToggle = displayDescription.length > 140;
   const orderedChapters = React.useMemo(() => {
     let copy = [...state.chapters];
-    
+
     if (searchQuery.trim() !== "") {
       const q = searchQuery.trim().toLowerCase();
       copy = copy.filter((c) => {
@@ -362,8 +355,7 @@ export default function MangaDetailScreen() {
           params: {
             chapterId: resume.chapterId,
             mangaTitle: displayTitle,
-            coverUrl:
-              displayCover,
+            coverUrl: displayCover,
           },
         })
       }
@@ -637,8 +629,7 @@ export default function MangaDetailScreen() {
       >
         <ExpoImage
           source={{
-            uri:
-              displayCover,
+            uri: displayCover,
           }}
           style={{
             width: 96,
@@ -718,59 +709,128 @@ export default function MangaDetailScreen() {
       {/* ── Metadata Section ── */}
       {displayMeta && (
         <View style={{ gap: 10 }}>
-
           {/* Status + Release Year + Stats */}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {/* Status badge */}
             {displayMeta.status === 1 && (
-              <View style={{
-                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
-                backgroundColor: "rgba(52,199,89,0.15)",
-                borderWidth: 1, borderColor: "rgba(52,199,89,0.4)",
-              }}>
-                <Text style={{ color: "#34C759", fontWeight: "800", fontSize: 12 }}>Ongoing</Text>
+              <View
+                style={{
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: "rgba(52,199,89,0.15)",
+                  borderWidth: 1,
+                  borderColor: "rgba(52,199,89,0.4)",
+                }}
+              >
+                <Text
+                  style={{ color: "#34C759", fontWeight: "800", fontSize: 12 }}
+                >
+                  Ongoing
+                </Text>
               </View>
             )}
             {displayMeta.status === 2 && (
-              <View style={{
-                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
-                backgroundColor: colors.chip,
-                borderWidth: 1, borderColor: colors.border,
-              }}>
-                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>Completed</Text>
+              <View
+                style={{
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: colors.chip,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontWeight: "800",
+                    fontSize: 12,
+                  }}
+                >
+                  Completed
+                </Text>
               </View>
             )}
             {/* Release year */}
             {!!displayMeta.year && (
-              <View style={{
-                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
-                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
-                flexDirection: "row", alignItems: "center", gap: 5,
-              }}>
+              <View
+                style={{
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: colors.chip,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
                 <IconSymbol name="calendar" size={12} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{displayMeta.year}</Text>
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontWeight: "800",
+                    fontSize: 12,
+                  }}
+                >
+                  {displayMeta.year}
+                </Text>
               </View>
             )}
             {/* View count */}
             {displayMeta.views > 0 && (
-              <View style={{
-                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
-                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
-                flexDirection: "row", alignItems: "center", gap: 5,
-              }}>
+              <View
+                style={{
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: colors.chip,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
                 <IconSymbol name="eye" size={12} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{formatCount(displayMeta.views)}</Text>
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontWeight: "800",
+                    fontSize: 12,
+                  }}
+                >
+                  {formatCount(displayMeta.views)}
+                </Text>
               </View>
             )}
             {/* Bookmark count */}
             {displayMeta.bookmarks > 0 && (
-              <View style={{
-                paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999,
-                backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border,
-                flexDirection: "row", alignItems: "center", gap: 5,
-              }}>
+              <View
+                style={{
+                  paddingVertical: 5,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: colors.chip,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
                 <IconSymbol name="bookmark" size={12} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>{formatCount(displayMeta.bookmarks)}</Text>
+                <Text
+                  style={{
+                    color: colors.subtext,
+                    fontWeight: "800",
+                    fontSize: 12,
+                  }}
+                >
+                  {formatCount(displayMeta.bookmarks)}
+                </Text>
               </View>
             )}
           </View>
@@ -778,27 +838,96 @@ export default function MangaDetailScreen() {
           {/* Taxonomy Section matching image layout */}
           <View style={{ gap: 12 }}>
             {/* Row 1: Genre | Author */}
-            {(displayMeta.genres.length > 0 || displayMeta.authors.length > 0) && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
+            {(displayMeta.genres.length > 0 ||
+              displayMeta.authors.length > 0) && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ alignItems: "center", gap: 8 }}
+              >
                 {displayMeta.genres.length > 0 && (
                   <>
-                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Genre</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginRight: 2,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Genre
+                    </Text>
                     {displayMeta.genres.map((g) => (
-                      <View key={`g-${g.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{g.name}</Text>
+                      <View
+                        key={`g-${g.slug}`}
+                        style={{
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: colors.chip,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {g.name}
+                        </Text>
                       </View>
                     ))}
                   </>
                 )}
-                {displayMeta.genres.length > 0 && displayMeta.authors.length > 0 && (
-                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
-                )}
+                {displayMeta.genres.length > 0 &&
+                  displayMeta.authors.length > 0 && (
+                    <View
+                      style={{
+                        width: 1,
+                        height: 16,
+                        backgroundColor: colors.border,
+                        marginHorizontal: 4,
+                      }}
+                    />
+                  )}
                 {displayMeta.authors.length > 0 && (
                   <>
-                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Author</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginRight: 2,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Author
+                    </Text>
                     {displayMeta.authors.map((a) => (
-                      <View key={`a-${a.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{a.name}</Text>
+                      <View
+                        key={`a-${a.slug}`}
+                        style={{
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: colors.chip,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {a.name}
+                        </Text>
                       </View>
                     ))}
                   </>
@@ -807,40 +936,147 @@ export default function MangaDetailScreen() {
             )}
 
             {/* Row 2: Artist | Format | Type */}
-            {(displayMeta.artists.length > 0 || displayMeta.formats.length > 0 || displayMeta.types.length > 0) && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
+            {(displayMeta.artists.length > 0 ||
+              displayMeta.formats.length > 0 ||
+              displayMeta.types.length > 0) && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ alignItems: "center", gap: 8 }}
+              >
                 {displayMeta.artists.length > 0 && (
                   <>
-                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Artist</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginRight: 2,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Artist
+                    </Text>
                     {displayMeta.artists.map((a) => (
-                      <View key={`ar-${a.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{a.name}</Text>
+                      <View
+                        key={`ar-${a.slug}`}
+                        style={{
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: colors.chip,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {a.name}
+                        </Text>
                       </View>
                     ))}
                   </>
                 )}
-                {displayMeta.artists.length > 0 && (displayMeta.formats.length > 0 || displayMeta.types.length > 0) && (
-                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
-                )}
+                {displayMeta.artists.length > 0 &&
+                  (displayMeta.formats.length > 0 ||
+                    displayMeta.types.length > 0) && (
+                    <View
+                      style={{
+                        width: 1,
+                        height: 16,
+                        backgroundColor: colors.border,
+                        marginHorizontal: 4,
+                      }}
+                    />
+                  )}
                 {displayMeta.formats.length > 0 && (
                   <>
-                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Format</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginRight: 2,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Format
+                    </Text>
                     {displayMeta.formats.map((f) => (
-                      <View key={`f-${f.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{f.name}</Text>
+                      <View
+                        key={`f-${f.slug}`}
+                        style={{
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: colors.chip,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {f.name}
+                        </Text>
                       </View>
                     ))}
                   </>
                 )}
-                {displayMeta.formats.length > 0 && displayMeta.types.length > 0 && (
-                  <View style={{ width: 1, height: 16, backgroundColor: colors.border, marginHorizontal: 4 }} />
-                )}
+                {displayMeta.formats.length > 0 &&
+                  displayMeta.types.length > 0 && (
+                    <View
+                      style={{
+                        width: 1,
+                        height: 16,
+                        backgroundColor: colors.border,
+                        marginHorizontal: 4,
+                      }}
+                    />
+                  )}
                 {displayMeta.types.length > 0 && (
                   <>
-                    <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13, marginRight: 2, marginLeft: 2 }}>Type</Text>
+                    <Text
+                      style={{
+                        color: colors.text,
+                        fontWeight: "900",
+                        fontSize: 13,
+                        marginRight: 2,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Type
+                    </Text>
                     {displayMeta.types.map((t) => (
-                      <View key={`t-${t.slug}`} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.chip, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ color: colors.text, fontWeight: "600", fontSize: 12 }}>{t.name}</Text>
+                      <View
+                        key={`t-${t.slug}`}
+                        style={{
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          backgroundColor: colors.chip,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: colors.text,
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          {t.name}
+                        </Text>
                       </View>
                     ))}
                   </>
@@ -855,7 +1091,8 @@ export default function MangaDetailScreen() {
         {/* Tombol Baca */}
         <Pressable
           onPress={() => {
-            const targetId = resume?.chapterId ?? state.manga?.latest_chapter_id;
+            const targetId =
+              resume?.chapterId ?? state.manga?.latest_chapter_id;
             if (targetId) {
               router.push(`/reader/${targetId}`);
             }
@@ -889,7 +1126,9 @@ export default function MangaDetailScreen() {
               coverUrl: cover,
             });
             setBookmarked(next);
-            setToast(next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark");
+            setToast(
+              next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark",
+            );
           }}
           style={{
             flex: 1,

@@ -98,6 +98,7 @@ export type ShngmChapterDetailData = {
   base_url_low: string;
 
   chapter: {
+    title(title: any): unknown;
     path: string;
     data: string[]; // list filename gambar
   };

@@ -19,6 +19,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Poppins } from "@/constants/theme";
 import type { FeedType, MangaFormat } from "@/src/api/shngmClient";
 import {
+  getMangaDetail,
   getMangaListByType,
   getRecommendedByFormat,
   invalidateListCache,
@@ -230,7 +231,25 @@ export default function HomeScreen() {
     try {
       setRecentLoading(true);
       const items = await getAllHistory(6);
-      setRecent(items);
+      
+      const populated = await Promise.all(
+        items.map(async (h) => {
+          if (h.mangaTitle && h.coverUrl) return h;
+          try {
+            const res = await getMangaDetail(h.mangaId);
+            const manga = res.data;
+            return {
+              ...h,
+              mangaTitle: h.mangaTitle ?? manga.title,
+              coverUrl: h.coverUrl ?? manga.cover_portrait_url ?? manga.cover_image_url ?? "",
+            };
+          } catch {
+            return h;
+          }
+        })
+      );
+      
+      setRecent(populated);
     } finally {
       setRecentLoading(false);
     }
