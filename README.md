@@ -72,6 +72,19 @@ Backend ini telah dikonfigurasi agar menerima Cross-Origin Resource Sharing (COR
 
 ## Fitur Utama & API Endpoints
 
+Aplikasi ini menggunakan **dua sumber API berbeda**:
+1. **API Eksternal (Shngm API)** untuk mengambil konten komik.
+2. **Backend Internal (Laravel API)** untuk menyimpan data user (autentikasi, histori, dsb).
+
+### Sumber Data Komik (External API)
+Aplikasi klien (Frontend) mengambil data komik dan chapter langsung dari API eksternal (`https://api.shngm.io`). Logika pemanggilan API ini diatur pada file `frontend/src/api/shngmClient.ts`.
+Beberapa endpoint yang digunakan antara lain:
+- `GET /v1/manga/list` : Mengambil daftar komik/manga.
+- `GET /v1/manga/detail/{mangaId}` : Mengambil informasi detail komik.
+- `GET /v1/chapter/{mangaId}/list` : Mengambil daftar chapter.
+- `GET /v1/chapter/detail/{chapterId}` : Mengambil detail halaman gambar chapter untuk dibaca.
+
+### Autentikasi Backend Internal
 Autentikasi menggunakan **Laravel Sanctum (Bearer Token)**. Token ini akan disimpan secara otomatis di aplikasi klien ketika berhasil login atau registrasi.
 
 ### Autentikasi
