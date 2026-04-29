@@ -1,79 +1,116 @@
 # Komikam
 
-Aplikasi baca komik berbasis Expo + React Native dengan fokus pada performa baca, penyimpanan lokal, dan navigasi sederhana.
+Aplikasi baca komik/manga modern berbasis **React Native (Expo)** dengan **Laravel REST API & MySQL** di sisi backend. Proyek ini menggunakan arsitektur monorepo sederhana yang memisahkan frontend dan backend pada folder masing-masing.
 
-## Fitur Utama
+## Struktur Proyek
 
-- Feed komik (tab `project` dan `mirror`).
-- Rekomendasi berdasarkan format: manhwa, manga, manhua.
-- Pencarian judul dari halaman home.
-- Halaman detail manga + daftar chapter (pagination).
-- Reader chapter dengan:
-  - simpan progress baca otomatis,
-  - resume progress,
-  - prev/next chapter,
-  - slider lompat halaman,
-  - tap untuk show/hide controls, double tap untuk zoom.
-- Bookmark + cek update chapter bookmark.
-- Riwayat baca.
-- Tema `light`, `dark`, `system`.
-- Profil akun lokal + sync upload/download berbasis AsyncStorage.
-
-## Tech Stack
-
-- Expo SDK 54
-- React Native 0.81
-- Expo Router
-- TypeScript
-- AsyncStorage
-
-## Prasyarat
-
-- Node.js 18+ (disarankan)
-- npm
-- Expo Go / Android Emulator / iOS Simulator
-
-## Menjalankan Proyek
-
-```bash
-npm install
-npm run start
+```text
+komikam/
+├── frontend/   ← Aplikasi React Native / Expo (Klien)
+└── backend/    ← Laravel REST API (Server)
 ```
 
-Perintah lain:
+---
 
-- `npm run android` menjalankan di Android
-- `npm run ios` menjalankan di iOS
-- `npm run web` menjalankan di web
-- `npm run lint` menjalankan lint
+## 1. Frontend (`/frontend`)
 
-## Struktur Folder
+**Tech stack:** React Native, Expo, TypeScript, Expo Router, AsyncStorage
 
-- `app/` route dan screen utama (Expo Router)
-- `components/` komponen UI reusable
-- `src/api/` client API (`shngmClient.ts`)
-- `src/store/` state/persistensi lokal (bookmark, history, theme, account, updates)
-- `src/theme/` theme context aplikasi
-- `assets/` aset gambar/icon
+### Cara Menjalankan Frontend
 
-## API
+```bash
+cd frontend
+npm install
+npx expo start
+```
 
-- Base URL: `https://api.shngm.io`
-- Implementasi client: `src/api/shngmClient.ts`
-- Sudah termasuk timeout, retry dengan backoff, cache memory, dan cache persist (AsyncStorage) untuk request GET.
+### Konfigurasi URL API
+Aplikasi frontend akan secara otomatis mendeteksi URL backend berdasarkan platform yang digunakan (iOS/Web akan memakai `localhost`, Android Emulator otomatis menggunakan `10.0.2.2`).
 
-## Persistensi Lokal
+Jika kamu mengetes di **perangkat asli (Physical Device)**, kamu wajib mengatur `.env.local` di folder `frontend/` menggunakan IP komputer lokal kamu:
 
-Data penting disimpan di AsyncStorage, termasuk:
+```env
+# .env.local
+# Ganti dengan IP LAN komputer kamu, misal:
+EXPO_PUBLIC_KOMIKAM_API_URL=http://192.168.1.xxx:8000
+```
+*(Ingat untuk me-restart Expo server `npx expo start` setelah mengubah file `.env.local`)*
 
-- Bookmark
-- Reading history/progress
-- Mode tema
-- Profil akun lokal
-- Simulasi data cloud untuk fitur sync
-- Cache respons API
+---
 
-## Catatan Pengembangan
+## 2. Backend (`/backend`)
 
-- Beberapa screen detail masih mengambil metadata manga dari list endpoint (belum endpoint detail by id khusus).
-- Koneksi internet dibutuhkan untuk memuat data manga/chapter terbaru.
+**Tech stack:** Laravel 11.x / 13, PHP 8.3, MySQL, Laravel Sanctum (Autentikasi Token)
+
+### Cara Menjalankan Backend
+
+```bash
+cd backend
+composer install
+
+# Siapkan file .env
+cp .env.example .env
+php artisan key:generate
+
+# Konfigurasi database MySQL di .env
+# DB_DATABASE=komikam_api
+# DB_USERNAME=root
+# DB_PASSWORD=
+
+# Migrasi tabel ke database
+php artisan migrate
+
+# Jalankan server
+# Menggunakan --host=0.0.0.0 agar bisa diakses emulator dan perangkat di jaringan LAN yang sama
+php artisan serve --host=0.0.0.0 --port=8000
+```
+
+### Konfigurasi CORS
+Backend ini telah dikonfigurasi agar menerima Cross-Origin Resource Sharing (CORS) dari klien manapun saat fase development.
+
+---
+
+## Fitur Utama & API Endpoints
+
+Autentikasi menggunakan **Laravel Sanctum (Bearer Token)**. Token ini akan disimpan secara otomatis di aplikasi klien ketika berhasil login atau registrasi.
+
+### Autentikasi
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `POST` | `/api/auth/register` | Daftar akun baru (membutuhkan `name`, `email`, `password`) |
+| `POST` | `/api/auth/login` | Login akun, mengembalikan Token dan data user |
+| `POST` | `/api/auth/logout` | Logout dan menghapus Token dari server *(Protected)* |
+| `GET`  | `/api/auth/me` | Mengambil data user yang sedang login *(Protected)* |
+
+### Histori Bacaan (Reading History)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET`  | `/api/history` | Menampilkan seluruh history manga user *(Protected)* |
+| `PUT`  | `/api/history/{mangaId}` | Menyimpan / memperbarui progress chapter & halaman terakhir *(Protected)* |
+| `DELETE`| `/api/history/{mangaId}` | Menghapus history manga tertentu *(Protected)* |
+| `DELETE`| `/api/history` | Menghapus semua history bacaan user *(Protected)* |
+
+### Bookmarks
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET`  | `/api/bookmarks` | Menampilkan semua manga yang di-bookmark *(Protected)* |
+| `GET`  | `/api/bookmarks/{mangaId}` | Cek status apakah manga di-bookmark *(Protected)* |
+| `POST` | `/api/bookmarks` | Toggle bookmark (simpan/hapus) *(Protected)* |
+| `DELETE`| `/api/bookmarks/{mangaId}` | Menghapus bookmark dari ID tertentu *(Protected)* |
+
+### Pengaturan (Settings)
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET`  | `/api/settings` | Mengambil pengaturan aplikasi *(Protected)* |
+| `PATCH`| `/api/settings` | Memperbarui pengaturan (misal: mode baca, kualitas gambar) *(Protected)* |
+
+### Update Notifikasi Chapter Baru
+| Method | Endpoint | Deskripsi |
+|---|---|---|
+| `GET`  | `/api/updates/pending` | Mengambil notifikasi chapter baru *(Protected)* |
+| `POST` | `/api/updates/check` | Mengecek ketersediaan update chapter terbaru *(Protected)* |
+| `DELETE`| `/api/updates/{mangaId}` | Menutup / Dismiss notifikasi update untuk manga *(Protected)* |
+| `DELETE`| `/api/updates` | Membersihkan semua notifikasi update *(Protected)* |
+
+> **Catatan Mode Offline (Frontend):** 
+> Aplikasi menggunakan penanganan *graceful fallback*. Jika ada kendala koneksi atau user belum melakukan login, maka data seperti `history` atau `bookmarks` akan mengembalikan array kosong `[]` (tidak membuat aplikasi *crash*).
