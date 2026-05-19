@@ -27,10 +27,11 @@ import {
 import type { ShngmManga } from "@/src/api/shngmTypes";
 import { getAllHistory, type ReadingProgress } from "@/src/store/history";
 
+import { MangaGridSkeleton, MangaListSkeleton } from "@/components/ui/SkeletonLoaders";
 import HeroCarousel from "@/components/home/HeroCarousel";
 import RecommendedSection from "@/components/home/RecommendedSection";
 import { useAppTheme } from "@/src/theme/ThemeContext";
-import Ionicons from "@expo/vector-icons/build/Ionicons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 type FeedState = {
   items: ShngmManga[];
@@ -73,6 +74,42 @@ function isOfflineError(err: unknown): boolean {
   return false;
 }
 
+function getFlagEmoji(countryId: string) {
+  const map: Record<string, string> = {
+    kr: "🇰🇷", jp: "🇯🇵", cn: "🇨🇳", id: "🇮🇩", gb: "🇬🇧", us: "🇺🇸",
+  };
+  return map[(countryId || "").toLowerCase()] || countryId?.toUpperCase() || "";
+}
+
+function parseRelativeTime(dateStr: string) {
+  if (!dateStr) return "";
+  if (dateStr.includes("hour")) return dateStr.split(" ")[0] + " jam lalu";
+  if (dateStr.includes("day")) return dateStr.split(" ")[0] + " hari lalu";
+  if (dateStr.includes("min")) return dateStr.split(" ")[0] + " mnt lalu";
+  if (dateStr.includes("sec")) return "Baru saja";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  const diffMs = new Date().getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return "Baru saja";
+  if (diffMins < 60) return `${diffMins} mnt lalu`;
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  if (diffDays < 30) return `${diffDays} hari lalu`;
+  return `${Math.floor(diffDays / 30)} bln lalu`;
+}
+
+function getStatusLabel(status: number) {
+  if (status === 1) return "Ongoing";
+  if (status === 2) return "Completed";
+  return "";
+}
+
+function getFormatLabel(manga: ShngmManga) {
+  return manga.taxonomy?.Format?.[0]?.name || "";
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { resolved, setMode } = useAppTheme();
@@ -109,6 +146,7 @@ export default function HomeScreen() {
       placeholder: isDark ? "#7E7E91" : "#9A8F83",
       shimmerBase: isDark ? "#1A1A24" : "#EFE6DA",
       shimmerHighlight: isDark ? "#2A2A36" : "#F7F1E8",
+      danger: isDark ? "#FF5C5C" : "#D32F2F",
     }),
     [isDark],
   );
@@ -824,24 +862,57 @@ export default function HomeScreen() {
   if (activeFeed.error && activeFeed.items.length === 0) {
     return (
       <View
-        style={{ flex: 1, backgroundColor: colors.bg, padding: 16, gap: 12 }}
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          padding: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+        }}
       >
-        <Text style={{ fontWeight: "900", color: colors.text }}>
-          {offline ? "Kamu sedang offline" : `Gagal load ${active}`}
-        </Text>
-        <Text style={{ color: colors.subtext }}>
-          {offline ? "Cek koneksi internet lalu coba lagi." : activeFeed.error}
-        </Text>
-        <Pressable
-          onPress={() => void loadFirst(active)}
+        <View
           style={{
-            padding: 12,
+            width: 80,
+            height: 80,
+            borderRadius: 40,
             backgroundColor: colors.ghost,
-            borderRadius: 12,
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 8,
           }}
         >
-          <Text style={{ color: colors.ghostText, fontWeight: "900" }}>
-            {offline ? "Coba lagi" : "Retry"}
+          <IconSymbol
+            name={offline ? "wifi.slash" : "exclamationmark.triangle.fill"}
+            size={40}
+            color={colors.text}
+          />
+        </View>
+        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" }}>
+          {offline ? "Kamu Sedang Offline" : `Gagal load ${active}`}
+        </Text>
+        <Text style={{ fontSize: 16, color: colors.subtext, textAlign: "center", paddingHorizontal: 20 }}>
+          {offline ? "Cek koneksi internetmu lalu coba muat ulang halaman ini." : activeFeed.error}
+        </Text>
+
+        <Pressable
+          onPress={() => void loadFirst(active)}
+          style={({ pressed }) => ({
+            marginTop: 10,
+            paddingVertical: 14,
+            paddingHorizontal: 32,
+            backgroundColor: colors.text,
+            borderRadius: 999,
+            opacity: pressed ? 0.8 : 1,
+            shadowColor: colors.text,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+          })}
+        >
+          <Text style={{ color: colors.bg, fontWeight: "900", fontSize: 16 }}>
+            {offline ? "Coba Lagi" : "Retry"}
           </Text>
         </Pressable>
       </View>
@@ -859,8 +930,8 @@ export default function HomeScreen() {
           gap: 10,
         }}
       >
-        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text }}>
-          Komikam
+        <Text style={{ fontSize: 24, fontWeight: "900", color: colors.text }}>
+          ItzKomik
         </Text>
 
         <View
@@ -1390,10 +1461,9 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
             {useServerSearch && searchState.loading ? (
-              <>
-                <ActivityIndicator />
-                <Text style={{ color: colors.subtext }}>Mencari...</Text>
-              </>
+              <View style={{ paddingTop: 16 }}>
+                {isGrid ? <MangaGridSkeleton columns={numColumns} /> : <MangaListSkeleton />}
+              </View>
             ) : offline ? (
               <>
                 <Text style={{ color: colors.subtext }}>
@@ -1452,17 +1522,40 @@ export default function HomeScreen() {
                         gap: 12,
                       }}
                     >
-                      <Image
-                        source={{
-                          uri: item.cover_portrait_url || item.cover_image_url,
-                        }}
-                        style={{
-                          width: 72,
-                          height: 96,
-                          borderRadius: 14,
-                          backgroundColor: colors.chip,
-                        }}
-                      />
+                      <View style={{ position: "relative" }}>
+                        <Image
+                          source={{
+                            uri: item.cover_portrait_url || item.cover_image_url,
+                          }}
+                          style={{
+                            width: 72,
+                            height: 96,
+                            borderRadius: 14,
+                            backgroundColor: colors.chip,
+                          }}
+                        />
+                        {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+                          <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#FF3B30', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 1, elevation: 2, zIndex: 10 }}>
+                            <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>NEW</Text>
+                          </View>
+                        )}
+                        {item.latest_chapter_time ? (
+                          <View style={{ position: "absolute", top: 4, left: 4, backgroundColor: colors.danger, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
+                          </View>
+                        ) : null}
+                        {item.status ? (
+                          <View style={{ position: "absolute", bottom: 4, left: 4, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
+                          </View>
+                        ) : null}
+                        {item.country_id ? (
+                          <View style={{ position: "absolute", bottom: 4, right: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                            <Text style={{ fontSize: 9 }}>{getFlagEmoji(item.country_id)}</Text>
+                            <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
+                          </View>
+                        ) : null}
+                      </View>
 
                       <View style={{ flex: 1, gap: 6 }}>
                         <Text
@@ -1559,6 +1652,27 @@ export default function HomeScreen() {
                       }}
                       resizeMode="cover"
                     />
+                    {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+                      <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }}>
+                        <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>NEW</Text>
+                      </View>
+                    )}
+                    {item.latest_chapter_time ? (
+                      <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: colors.danger, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
+                      </View>
+                    ) : null}
+                    {item.status ? (
+                      <View style={{ position: "absolute", bottom: 6, left: 6, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
+                      </View>
+                    ) : null}
+                    {item.country_id ? (
+                      <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                        <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
+                        <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
+                      </View>
+                    ) : null}
                   </View>
                   <View style={{ padding: 8, gap: 4 }}>
                     <Text
@@ -1582,15 +1696,23 @@ export default function HomeScreen() {
                       <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "700" }}>
                         Ch {item.latest_chapter_number || "-"}
                       </Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                        <IconSymbol name="eye" size={12} color={colors.subtext} />
-                        <Text style={{ color: colors.subtext, fontSize: 11 }}>
-                          {item.view_count >= 1000000 
-                            ? (item.view_count / 1000000).toFixed(1) + "M"
-                            : item.view_count >= 1000
-                            ? (item.view_count / 1000).toFixed(1) + "K"
-                            : item.view_count}
-                        </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                          <Ionicons name="star" size={12} color="#F5B041" />
+                          <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                            {item.user_rate || "0.0"}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                          <IconSymbol name="eye" size={12} color={colors.subtext} />
+                          <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                            {item.view_count >= 1000000 
+                              ? (item.view_count / 1000000).toFixed(1) + "M"
+                              : item.view_count >= 1000
+                              ? (item.view_count / 1000).toFixed(1) + "K"
+                              : item.view_count}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                   </View>

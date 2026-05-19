@@ -19,7 +19,7 @@ import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getChapterList, getMangaDetail } from "../../src/api/shngmClient";
 import type { ShngmChapter, ShngmManga } from "../../src/api/shngmTypes";
 import { isBookmarked, toggleBookmark } from "../../src/store/bookmarks";
-import { getLatestProgressByManga } from "../../src/store/history";
+import { getLatestProgressByManga, getReadChaptersLocal } from "../../src/store/history";
 
 type ResumeState = {
   chapterId: string;
@@ -97,7 +97,9 @@ export default function MangaDetailScreen() {
   const [sortDir, setSortDir] = React.useState<"desc" | "asc">("desc");
   const [toast, setToast] = React.useState<string | null>(null);
   const [offline, setOffline] = React.useState(false);
+  const [readChapters, setReadChapters] = React.useState<string[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [firstChapter, setFirstChapter] = React.useState<ShngmChapter | null>(null);
 
   const shimmer = React.useRef(new Animated.Value(0)).current;
   const SHIMMER_WIDTH = 140;
@@ -148,9 +150,9 @@ export default function MangaDetailScreen() {
   const routeCountryId = typeof countryId === "string" ? countryId : "";
   const parsedUserRate =
     typeof userRate === "string" && userRate.trim() !== ""
-      ? Number(userRate)
+      ? parseFloat(userRate)
       : null;
-  const routeUserRate = Number.isFinite(parsedUserRate) ? parsedUserRate : null;
+
   const displayTitle = state.manga?.title || routeTitle || "Manga";
   const displayDescription =
     state.manga?.description || routeDescription || "-";
@@ -163,7 +165,7 @@ export default function MangaDetailScreen() {
   const displayUserRate =
     typeof state.manga?.user_rate === "number"
       ? state.manga.user_rate
-      : routeUserRate;
+      : Number.isFinite(parsedUserRate) ? parsedUserRate : null;
 
   // --- Helper format angka (1200 → "1.2K") ---
   function formatCount(n: number): string {
@@ -198,7 +200,11 @@ export default function MangaDetailScreen() {
 
   const loadResume = React.useCallback(async () => {
     if (!id) return;
-    const progress = await getLatestProgressByManga(id);
+    const [progress, localRead] = await Promise.all([
+      getLatestProgressByManga(id),
+      getReadChaptersLocal(id),
+    ]);
+    setReadChapters(localRead);
     setResume(
       progress
         ? {
@@ -223,11 +229,19 @@ export default function MangaDetailScreen() {
     try {
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      const [detailRes, chapterRes] = await Promise.all([
+      // Ambil detail, chapter terbaru (page 1), dan cari chapter pertama (sort asc)
+      const [detailRes, chapterRes, firstChRes] = await Promise.all([
         getMangaDetail(id),
-        getChapterList({ mangaId: id, page: 1, pageSize: 20 }),
+        getChapterList({ mangaId: id, page: 1, pageSize: 20, sortOrder: sortDir }),
+        // Gunakan getChapterList yang sudah ada untuk ambil chapter paling awal
+        getChapterList({ mangaId: id, page: 1, pageSize: 1, sortOrder: "asc" }).catch(() => null)
       ]);
+
       const manga: ShngmManga = detailRes.data;
+      if (firstChRes && firstChRes.retcode === 0 && firstChRes.data.length > 0) {
+        setFirstChapter(firstChRes.data[0]);
+      }
+
       setState((s) => ({
         ...s,
         manga,
@@ -273,6 +287,7 @@ export default function MangaDetailScreen() {
         mangaId: id,
         page: nextPage,
         pageSize: 20,
+        sortOrder: sortDir,
       });
 
       setState((s) => {
@@ -331,6 +346,12 @@ export default function MangaDetailScreen() {
   }, [state.chapters, sortDir, searchQuery]);
   const jumpIndex = React.useMemo(() => {
     if (orderedChapters.length === 0) return 0;
+    
+    if (resume) {
+      const idx = orderedChapters.findIndex((c) => c.chapter_number === resume.chapterNumber);
+      if (idx >= 0) return idx;
+    }
+
     let maxNum = -Infinity;
     let minNum = Infinity;
     for (const ch of orderedChapters) {
@@ -344,7 +365,7 @@ export default function MangaDetailScreen() {
       return num === targetNum;
     });
     return idx >= 0 ? idx : 0;
-  }, [orderedChapters, sortDir]);
+  }, [orderedChapters, sortDir, resume]);
   const listRef = React.useRef<FlatList<ShngmChapter>>(null);
 
   const resumeCta = resume ? (
@@ -540,29 +561,55 @@ export default function MangaDetailScreen() {
         style={{
           flex: 1,
           backgroundColor: colors.bg,
-          padding: 16,
-          gap: 12,
+          padding: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
           paddingTop: insets.top + 16,
         }}
       >
-        <Text style={{ fontWeight: "900", color: colors.text }}>
-          {offline ? "Kamu sedang offline" : "Gagal load"}
+        <View
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: colors.ghost,
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 8,
+          }}
+        >
+          <IconSymbol
+            name={offline ? "wifi.slash" : "exclamationmark.triangle.fill"}
+            size={40}
+            color={colors.text}
+          />
+        </View>
+        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" }}>
+          {offline ? "Kamu Sedang Offline" : "Gagal load"}
         </Text>
-        <Text style={{ color: colors.subtext }}>
-          {offline ? "Cek koneksi internet lalu coba lagi." : state.error}
+        <Text style={{ fontSize: 16, color: colors.subtext, textAlign: "center", paddingHorizontal: 20 }}>
+          {offline ? "Cek koneksi internetmu lalu coba muat ulang halaman ini." : state.error}
         </Text>
 
         <Pressable
           onPress={() => void load()}
-          style={{
-            paddingVertical: 12,
-            paddingHorizontal: 14,
-            backgroundColor: colors.ghost,
-            borderRadius: 12,
-          }}
+          style={({ pressed }) => ({
+            marginTop: 10,
+            paddingVertical: 14,
+            paddingHorizontal: 32,
+            backgroundColor: colors.text,
+            borderRadius: 999,
+            opacity: pressed ? 0.8 : 1,
+            shadowColor: colors.text,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2,
+            shadowRadius: 8,
+            elevation: 4,
+          })}
         >
-          <Text style={{ color: colors.ghostText, fontWeight: "900" }}>
-            {offline ? "Coba lagi" : "Retry"}
+          <Text style={{ color: colors.bg, fontWeight: "900", fontSize: 16 }}>
+            {offline ? "Coba Lagi" : "Retry"}
           </Text>
         </Pressable>
       </View>
@@ -1173,6 +1220,35 @@ export default function MangaDetailScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Pressable
             onPress={() => {
+              const target = firstChapter ?? (state.chapters.length > 0 ? state.chapters[state.chapters.length - 1] : null);
+              if (!target) return;
+
+              router.push({
+                pathname: "/reader/[chapterId]",
+                params: {
+                  chapterId: target.chapter_id,
+                  mangaTitle: displayTitle,
+                  coverUrl: displayCover,
+                },
+              });
+            }}
+            style={{
+              paddingVertical: 6,
+              paddingHorizontal: 10,
+              borderRadius: 999,
+              backgroundColor: colors.chip,
+              borderWidth: 1,
+              borderColor: colors.border,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <IconSymbol name="book.fill" size={14} color={colors.subtext} />
+            <Text style={{ color: colors.subtext, fontWeight: "800" }}>Awal</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
               listRef.current?.scrollToIndex({
                 index: jumpIndex,
                 animated: true,
@@ -1202,7 +1278,7 @@ export default function MangaDetailScreen() {
           <Pressable
             onPress={() => {
               setSortDir((v) => (v === "desc" ? "asc" : "desc"));
-              listRef.current?.scrollToOffset({ offset: 0, animated: false });
+              // list akan ter-refresh otomatis via useEffect sortDir
             }}
             style={{
               paddingVertical: 6,
@@ -1378,10 +1454,27 @@ export default function MangaDetailScreen() {
               />
 
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={{ fontWeight: "900", color: colors.text }}>
-                  Chapter {item.chapter_number}
-                  {item.chapter_title ? ` - ${item.chapter_title}` : ""}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <Text 
+                    style={{ 
+                      fontWeight: resume && item.chapter_number === resume.chapterNumber ? "700" : "900", 
+                      color: resume && item.chapter_number === resume.chapterNumber ? colors.subtext : colors.text 
+                    }}
+                  >
+                    Chapter {item.chapter_number}
+                    {item.chapter_title ? ` - ${item.chapter_title}` : ""}
+                  </Text>
+                  {resume && item.chapter_number === resume.chapterNumber && (
+                    <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "800" }}>Terakhir Dibaca</Text>
+                    </View>
+                  )}
+                  {readChapters.includes(item.chapter_id) && (!resume || item.chapter_number !== resume.chapterNumber) && (
+                    <View style={{ backgroundColor: colors.chip, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.border }}>
+                      <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "800" }}>Sudah Dibaca</Text>
+                    </View>
+                  )}
+                </View>
 
                 <View
                   style={{
@@ -1431,7 +1524,12 @@ export default function MangaDetailScreen() {
         )}
       />
       {resumeCta && (
-        <View style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
+        <View style={{ 
+          position: "absolute", 
+          left: 12, 
+          right: 12, 
+          bottom: insets.bottom > 0 ? insets.bottom + 4 : 12 
+        }}>
           {resumeCta}
         </View>
       )}

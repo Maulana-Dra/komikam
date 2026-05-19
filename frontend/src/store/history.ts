@@ -85,3 +85,32 @@ export async function replaceHistory(items: ReadingProgress[]): Promise<void> {
     await upsertProgress(item);
   }
 }
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const READ_CHAPTERS_KEY = "read_chapters:";
+
+export async function markChapterAsReadLocal(mangaId: string, chapterId: string): Promise<void> {
+  try {
+    const key = READ_CHAPTERS_KEY + mangaId;
+    const existing = await AsyncStorage.getItem(key);
+    const list: string[] = existing ? JSON.parse(existing) : [];
+    if (!list.includes(chapterId)) {
+      list.push(chapterId);
+      await AsyncStorage.setItem(key, JSON.stringify(list));
+    }
+  } catch (e) {
+    console.error("Failed to save read chapter", e);
+  }
+}
+
+export async function getReadChaptersLocal(mangaId: string): Promise<string[]> {
+  try {
+    const key = READ_CHAPTERS_KEY + mangaId;
+    const existing = await AsyncStorage.getItem(key);
+    return existing ? JSON.parse(existing) : [];
+  } catch (e) {
+    console.error("Failed to get read chapters", e);
+    return [];
+  }
+}

@@ -46,6 +46,12 @@ Route::prefix('auth')->group(function () {
     Route::post('login',    [AuthController::class, 'login']);
 });
 
+// Tambahkan throttle middleware
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('register', [AuthController::class, 'register']);
+    Route::post('login', [AuthController::class, 'login']);
+});
+
 // ── Protected (Butuh Token Sanctum) ───────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 

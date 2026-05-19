@@ -18,6 +18,7 @@ import {
   View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MangaGridSkeleton, MangaListSkeleton } from "@/components/ui/SkeletonLoaders";
 
 // ─────────────────────────── constants ───────────────────────────
 const MOCK_GENRES = [
@@ -70,12 +71,39 @@ function formatViews(views: number) {
   return String(views);
 }
 
-function parseRelativeTime(s: string) {
-  if (!s) return "";
-  if (s.includes("hour")) return s.split(" ")[0] + "h";
-  if (s.includes("day")) return s.split(" ")[0] + "d";
-  if (s.includes("min")) return s.split(" ")[0] + "m";
-  return s;
+function parseRelativeTime(dateStr: string) {
+  if (!dateStr) return "";
+
+  // Jika dari API sudah berupa string relative ("2 hours ago")
+  if (dateStr.includes("hour")) return dateStr.split(" ")[0] + " jam lalu";
+  if (dateStr.includes("day")) return dateStr.split(" ")[0] + " hari lalu";
+  if (dateStr.includes("min")) return dateStr.split(" ")[0] + " mnt lalu";
+  if (dateStr.includes("sec")) return "Baru saja";
+
+  // Jika dateStr berupa timestamp ISO (2024-05-10T12:00:00Z)
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
+  const diffMs = new Date().getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return "Baru saja";
+  if (diffMins < 60) return `${diffMins} mnt lalu`;
+  if (diffHours < 24) return `${diffHours} jam lalu`;
+  if (diffDays < 30) return `${diffDays} hari lalu`;
+  return `${Math.floor(diffDays / 30)} bln lalu`;
+}
+
+function getStatusLabel(status: number) {
+  if (status === 1) return "Ongoing";
+  if (status === 2) return "Completed";
+  return "";
+}
+
+function getFormatLabel(manga: ShngmManga) {
+  return manga.taxonomy?.Format?.[0]?.name || "";
 }
 
 /** Client-side sort so all four options work without needing new API params */
@@ -90,10 +118,11 @@ function sortItems(items: ShngmManga[], key: SortKey): ShngmManga[] {
       return arr.sort((a, b) => b.bookmark_count - a.bookmark_count);
     case "latest":
     default:
-      return arr.sort(
-        (a, b) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-      );
+      return arr.sort((a, b) => {
+        const timeA = new Date(a.latest_chapter_time || a.updated_at).getTime();
+        const timeB = new Date(b.latest_chapter_time || b.updated_at).getTime();
+        return timeB - timeA;
+      });
   }
 }
 
@@ -323,6 +352,7 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
       <Pressable
         onPress={handlePress}
         style={({ pressed }) => ({
+          flex: 1,
           flexDirection: "row",
           backgroundColor: colors.card,
           borderRadius: 12,
@@ -335,16 +365,23 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
           padding: 10,
         })}
       >
-        <ExpoImage
-          source={{ uri: coverUri }}
-          style={{
-            width: 64,
-            height: 90,
-            borderRadius: 8,
-            backgroundColor: colors.border,
-          }}
-          contentFit="cover"
-        />
+        <View style={{ position: "relative" }}>
+          <ExpoImage
+            source={{ uri: coverUri }}
+            style={{
+              width: 72,
+              height: 96,
+              borderRadius: 8,
+              backgroundColor: colors.border,
+            }}
+            contentFit="cover"
+          />
+          {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+            <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#FF3B30', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 1, elevation: 2, zIndex: 10 }}>
+              <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>NEW</Text>
+            </View>
+          )}
+        </View>
         <View style={{ flex: 1, justifyContent: "center", gap: 4 }}>
           <Text
             style={{ color: colors.text, fontWeight: "900", fontSize: 14 }}
@@ -381,6 +418,14 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
                 <Ionicons name="star" size={11} color="#EAB308" />
                 <Text style={{ color: colors.subtext, fontSize: 11 }}>
                   {item.user_rate}
+                </Text>
+              </View>
+            ) : null}
+            {item.latest_chapter_time ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginLeft: 'auto' }}>
+                <Ionicons name="time-outline" size={12} color={colors.subtext} />
+                <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                  {parseRelativeTime(item.latest_chapter_time)}
                 </Text>
               </View>
             ) : null}
@@ -439,21 +484,20 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
             </Text>
           </View>
         ) : null}
+        {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+          <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }}>
+            <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>NEW</Text>
+          </View>
+        )}
+        {item.status ? (
+          <View style={{ position: "absolute", bottom: 6, left: 6, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
+          </View>
+        ) : null}
         {item.country_id ? (
-          <View
-            style={{
-              position: "absolute",
-              top: 6,
-              right: 6,
-              backgroundColor: "rgba(0,0,0,0.6)",
-              paddingHorizontal: 4,
-              paddingVertical: 2,
-              borderRadius: 4,
-            }}
-          >
-            <Text style={{ fontSize: 10 }}>
-              {getFlagEmoji(item.country_id)}
-            </Text>
+          <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
+            <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
+            <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
           </View>
         ) : null}
       </View>
@@ -477,11 +521,19 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
           >
             Ch {item.latest_chapter_number}
           </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-            <Ionicons name="eye" size={12} color={colors.subtext} />
-            <Text style={{ color: colors.subtext, fontSize: 11 }}>
-              {formatViews(item.view_count)}
-            </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              <Ionicons name="star" size={12} color="#F5B041" />
+              <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                {item.user_rate || "0.0"}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+              <Ionicons name="eye" size={12} color={colors.subtext} />
+              <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                {formatViews(item.view_count)}
+              </Text>
+            </View>
           </View>
         </View>
       </View>
@@ -578,6 +630,7 @@ export default function SearchScreen() {
   const isDark = resolved === "dark";
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const isDesktop = width >= 768;
 
@@ -618,9 +671,15 @@ export default function SearchScreen() {
 
   // data
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [rawItems, setRawItems] = useState<ShngmManga[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // stable toggle helpers
   const makeToggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) =>
@@ -658,6 +717,11 @@ export default function SearchScreen() {
 
   // fetch
   useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+    // Don't clear rawItems here immediately to avoid full blank screen on every keystroke,
+    // let the loading state handle the UI, or you can clear it if you want.
+    
     const timer = setTimeout(() => {
       setLoading(true);
       getMangaListByType({
@@ -670,16 +734,58 @@ export default function SearchScreen() {
           selectedGenres.length > 0
             ? selectedGenres[0].toLowerCase()
             : undefined, // API accepts 1 genre max currently
+        sort: sortBy === "latest" ? "latest" : undefined,
+        sortOrder: "desc",
       })
-        .then((res) => setRawItems(res.data))
+        .then((res) => {
+          setRawItems(res.data);
+          setHasMore(res.data.length >= 48);
+        })
         .catch((err) => console.log("fetch error:", err))
         .finally(() => setLoading(false));
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedFormat, selectedStatus, selectedGenres]);
+  }, [searchQuery, selectedFormat, selectedStatus, selectedGenres, sortBy]);
+
+  const loadMore = useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    
+    getMangaListByType({
+      page: nextPage,
+      pageSize: 20, // Load 20 on subsequent scrolls
+      query: searchQuery || undefined,
+      format: selectedFormat as any,
+      status: selectedStatus as any,
+      genre:
+        selectedGenres.length > 0
+          ? selectedGenres[0].toLowerCase()
+          : undefined,
+      sort: sortBy === "latest" ? "latest" : undefined,
+      sortOrder: "desc",
+    })
+      .then((res) => {
+        if (res.data.length > 0) {
+          setRawItems((prev) => {
+            // merge unique to prevent duplicates if API is weird
+            const map = new Map<string, ShngmManga>();
+            for (const it of prev) map.set(it.manga_id, it);
+            for (const it of res.data) map.set(it.manga_id, it);
+            return Array.from(map.values());
+          });
+          setPage(nextPage);
+        }
+        setHasMore(res.data.length >= 20);
+      })
+      .catch((err) => console.log("loadMore error:", err))
+      .finally(() => setLoadingMore(false));
+  }, [page, hasMore, loading, loadingMore, searchQuery, selectedFormat, selectedStatus, selectedGenres, sortBy]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    setPage(1);
+    setHasMore(true);
     getMangaListByType({
       page: 1,
       pageSize: 48,
@@ -688,11 +794,16 @@ export default function SearchScreen() {
       status: selectedStatus as any,
       genre:
         selectedGenres.length > 0 ? selectedGenres[0].toLowerCase() : undefined,
+      sort: sortBy === "latest" ? "latest" : undefined,
+      sortOrder: "desc",
     })
-      .then((res) => setRawItems(res.data))
+      .then((res) => {
+        setRawItems(res.data);
+        setHasMore(res.data.length >= 48);
+      })
       .catch((err) => console.log("refresh error:", err))
       .finally(() => setRefreshing(false));
-  }, [searchQuery, selectedFormat, selectedStatus, selectedGenres]);
+  }, [searchQuery, selectedFormat, selectedStatus, selectedGenres, sortBy]);
 
   // derived: sort client-side
   const items = useMemo(() => sortItems(rawItems, sortBy), [rawItems, sortBy]);
@@ -753,7 +864,7 @@ export default function SearchScreen() {
             backgroundColor: colors.card,
             borderRadius: 12,
             paddingHorizontal: 12,
-            paddingVertical: 8,
+            height: 44, // Fixed height to prevent vertical stretching
             borderWidth: 1,
             borderColor: colors.border,
           }}
@@ -764,6 +875,13 @@ export default function SearchScreen() {
             placeholderTextColor={colors.subtext}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              setTimeout(() => setIsSearchFocused(false), 200);
+            }}
+            multiline={false}
+            numberOfLines={1}
+            returnKeyType="search"
             style={{
               flex: 1,
               marginLeft: 10,
@@ -772,7 +890,7 @@ export default function SearchScreen() {
             }}
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery("")}>
+            <Pressable onPress={() => { setSearchQuery(""); setIsSearchFocused(false); }}>
               <Ionicons name="close-circle" size={18} color={colors.subtext} />
             </Pressable>
           )}
@@ -822,6 +940,87 @@ export default function SearchScreen() {
           <Ionicons name="chevron-down" size={14} color={colors.subtext} />
         </Pressable>
       </View>
+
+      {/* Suggestion Dropdown */}
+      {isSearchFocused && searchQuery.trim().length > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: 70 + insets.top, // Adjust top using insets.top
+            left: !isDesktop ? 54 : 12,
+            right: !isDesktop ? 12 : 150,
+            backgroundColor: colors.card,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            maxHeight: 300,
+            zIndex: 999,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 10,
+            overflow: "hidden"
+          }}
+        >
+          {loading ? (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <Text style={{ color: colors.subtext }}>Mencari...</Text>
+            </View>
+          ) : (() => {
+            const lowerQuery = searchQuery.trim().toLowerCase();
+            const suggestionItems = items.filter((item) => 
+              item.title.toLowerCase().includes(lowerQuery) || 
+              (item.alternative_title && item.alternative_title.toLowerCase().includes(lowerQuery))
+            ).slice(0, 5);
+
+            if (suggestionItems.length === 0) {
+              return (
+                <View style={{ padding: 16, alignItems: 'center' }}>
+                  <Text style={{ color: colors.subtext }}>Tidak ada hasil.</Text>
+                </View>
+              );
+            }
+            return (
+              <FlatList
+                data={suggestionItems}
+              keyExtractor={(item) => item.manga_id}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <Pressable
+                  onPress={() => {
+                    setIsSearchFocused(false);
+                    router.push({
+                      pathname: "/manga/[mangaId]",
+                      params: {
+                        mangaId: item.manga_id,
+                        title: item.title,
+                        coverUrl: item.cover_portrait_url || item.cover_image_url,
+                      },
+                    });
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: "row",
+                    padding: 12,
+                    alignItems: "center",
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.border,
+                    backgroundColor: pressed ? colors.border : "transparent"
+                  })}
+                >
+                  <Ionicons name="search-outline" size={16} color={colors.subtext} style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontWeight: "600" }} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+            />
+            );
+          })()}
+        </View>
+      )}
 
       {/* ── Horizontal Filter Bar ────────────────────────── */}
       <View style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
@@ -893,8 +1092,8 @@ export default function SearchScreen() {
           />
           {/* Status */}
           {[
-            { label: "Ongoing", value: "1" },
-            { label: "Completed", value: "2" },
+            { label: "Ongoing", value: "ongoing" },
+            { label: "Completed", value: "completed" },
           ].map((s) => (
             <Pressable
               key={s.value}
@@ -903,7 +1102,7 @@ export default function SearchScreen() {
                   selectedStatus === s.value ? undefined : s.value,
                 )
               }
-              style={{
+              style={({ pressed }) => ({
                 paddingHorizontal: 12,
                 paddingVertical: 6,
                 borderRadius: 999,
@@ -911,7 +1110,8 @@ export default function SearchScreen() {
                   selectedStatus === s.value ? colors.button : colors.chip,
                 borderWidth: 1,
                 borderColor: colors.border,
-              }}
+                opacity: pressed ? 0.8 : 1,
+              })}
             >
               <Text
                 style={{
@@ -1053,10 +1253,19 @@ export default function SearchScreen() {
                 colors={[isDark ? "#F2F2F7" : "#1E2329"]}
               />
             }
+            onEndReachedThreshold={0.5}
+            onEndReached={loadMore}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={{ paddingVertical: 16 }}>
+                  <ActivityIndicator color={colors.subtext} />
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               loading ? (
-                <View style={{ padding: 48, alignItems: "center" }}>
-                  <ActivityIndicator color={colors.primary} />
+                <View style={{ paddingTop: 16 }}>
+                  {isGridView ? <MangaGridSkeleton columns={columns} /> : <MangaListSkeleton />}
                 </View>
               ) : (
                 <View style={{ padding: 48, alignItems: "center", gap: 8 }}>
@@ -1090,6 +1299,31 @@ export default function SearchScreen() {
           />
         </View>
       </View>
+      
+      {/* Floating Refresh Button */}
+      <Pressable
+        onPress={onRefresh}
+        style={({ pressed }) => ({
+          position: "absolute",
+          bottom: 24, // pastikan di atas bottom bar
+          right: 24,
+          backgroundColor: colors.primary,
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 6,
+          opacity: pressed || refreshing ? 0.8 : 1,
+          zIndex: 100,
+        })}
+      >
+        <Ionicons name="refresh" size={24} color={isDark ? "#111" : "#fff"} />
+      </Pressable>
     </View>
   );
 }

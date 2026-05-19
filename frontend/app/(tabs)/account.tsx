@@ -1,4 +1,5 @@
 import React from "react";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   ActivityIndicator,
   Alert,
@@ -36,7 +37,7 @@ function formatTime(ts?: string | number): string {
 
 export default function AccountScreen() {
   const insets = useSafeAreaInsets();
-  const { resolved } = useAppTheme();
+  const { resolved, setMode, mode } = useAppTheme();
   const isDark = resolved === "dark";
 
   const colors = React.useMemo(
@@ -377,6 +378,53 @@ export default function AccountScreen() {
       {/* Divider */}
       <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
 
+      {/* ── Pengaturan Tema Aplikasi ────────────────────────────────────────── */}
+      <View style={{ gap: 16 }}>
+        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+          Tema Aplikasi
+        </Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          {[
+            { val: "system", label: "Otomatis", icon: "contrast-outline" },
+            { val: "light", label: "Terang", icon: "sunny-outline" },
+            { val: "dark", label: "Gelap", icon: "moon-outline" },
+          ].map((t) => (
+            <Pressable
+              key={t.val}
+              onPress={() => setMode(t.val as any)}
+              style={{
+                flex: 1,
+                paddingVertical: 12,
+                alignItems: "center",
+                borderRadius: 12,
+                backgroundColor: mode === t.val ? colors.text : colors.card,
+                borderWidth: 1,
+                borderColor: mode === t.val ? colors.text : colors.border,
+                gap: 6,
+              }}
+            >
+              <Ionicons
+                name={t.icon as any}
+                size={20}
+                color={mode === t.val ? colors.bg : colors.subtext}
+              />
+              <Text
+                style={{
+                  color: mode === t.val ? colors.bg : colors.subtext,
+                  fontWeight: mode === t.val ? "900" : "600",
+                  fontSize: 12,
+                }}
+              >
+                {t.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* Divider */}
+      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
+
       {/* ── Pengaturan Baca ───────────────────────────────────────────────── */}
       <View style={{ gap: 16 }}>
         <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
@@ -425,7 +473,7 @@ export default function AccountScreen() {
         {/* Reader Background */}
         <View>
           <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>
-            Warna Latar (Background)
+            Warna Latar Saat Membaca (Reader Background)
           </Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
             {[
