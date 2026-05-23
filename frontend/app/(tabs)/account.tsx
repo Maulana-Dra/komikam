@@ -72,6 +72,7 @@ export default function AccountScreen() {
   const [settings, setSettings] = React.useState<ReaderSettings>({
     imageQuality: "high",
     readerBg: "black",
+    readingMode: "scroll",
   });
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -375,141 +376,139 @@ export default function AccountScreen() {
         </View>
       )}
 
-      {/* Divider */}
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
+      {profile && (
+        <>
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
 
-      {/* ── Pengaturan Tema Aplikasi ────────────────────────────────────────── */}
-      <View style={{ gap: 16 }}>
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
-          Tema Aplikasi
-        </Text>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          {[
-            { val: "system", label: "Otomatis", icon: "contrast-outline" },
-            { val: "light", label: "Terang", icon: "sunny-outline" },
-            { val: "dark", label: "Gelap", icon: "moon-outline" },
-          ].map((t) => (
-            <Pressable
-              key={t.val}
-              onPress={() => setMode(t.val as any)}
-              style={{
-                flex: 1,
-                paddingVertical: 12,
-                alignItems: "center",
-                borderRadius: 12,
-                backgroundColor: mode === t.val ? colors.text : colors.card,
-                borderWidth: 1,
-                borderColor: mode === t.val ? colors.text : colors.border,
-                gap: 6,
-              }}
-            >
-              <Ionicons
-                name={t.icon as any}
-                size={20}
-                color={mode === t.val ? colors.bg : colors.subtext}
-              />
-              <Text
-                style={{
-                  color: mode === t.val ? colors.bg : colors.subtext,
-                  fontWeight: mode === t.val ? "900" : "600",
-                  fontSize: 12,
-                }}
-              >
-                {t.label}
+          {/* ── Pengaturan Tema Aplikasi ────────────────────────────────────────── */}
+          <View style={{ gap: 16 }}>
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+              Tema Aplikasi
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {[
+                { val: "system", label: "Otomatis", icon: "contrast-outline" },
+                { val: "light", label: "Terang", icon: "sunny-outline" },
+                { val: "dark", label: "Gelap", icon: "moon-outline" },
+              ].map((t) => (
+                <Pressable
+                  key={t.val}
+                  onPress={() => setMode(t.val as any)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    alignItems: "center",
+                    borderRadius: 12,
+                    backgroundColor: mode === t.val ? colors.text : colors.card,
+                    borderWidth: 1,
+                    borderColor: mode === t.val ? colors.text : colors.border,
+                    gap: 6,
+                  }}
+                >
+                  <Ionicons
+                    name={t.icon as any}
+                    size={20}
+                    color={mode === t.val ? colors.bg : colors.subtext}
+                  />
+                  <Text
+                    style={{
+                      color: mode === t.val ? colors.bg : colors.subtext,
+                      fontWeight: mode === t.val ? "900" : "600",
+                      fontSize: 12,
+                    }}
+                  >
+                    {t.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
+
+          {/* ── Pengaturan Baca ───────────────────────────────────────────────── */}
+          <View style={{ gap: 16 }}>
+            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
+              Pengaturan Baca
+            </Text>
+
+            {/* Image Quality */}
+            <View>
+              <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>
+                Kualitas Gambar
               </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {(["high", "low"] as const).map((q) => (
+                  <Pressable
+                    key={q}
+                    onPress={() => updateSetting({ imageQuality: q })}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 10,
+                      alignItems: "center",
+                      borderRadius: 10,
+                      backgroundColor: settings.imageQuality === q ? colors.text : colors.card,
+                      borderWidth: 1,
+                      borderColor: settings.imageQuality === q ? colors.text : colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: settings.imageQuality === q ? colors.bg : colors.subtext,
+                        fontWeight: settings.imageQuality === q ? "900" : "600",
+                      }}
+                    >
+                      {q === "high" ? "High (HQ)" : "Low (Data Saver)"}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-      {/* Divider */}
-      <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 4 }} />
-
-      {/* ── Pengaturan Baca ───────────────────────────────────────────────── */}
-      <View style={{ gap: 16 }}>
-        <Text style={{ color: colors.text, fontWeight: "900", fontSize: 18 }}>
-          Pengaturan Baca
-        </Text>
-
-        {!profile && (
-          <Text style={{ color: colors.subtext, fontSize: 13 }}>
-            Login untuk menyimpan pengaturan ke akun.
-          </Text>
-        )}
-
-        {/* Image Quality */}
-        <View>
-          <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>
-            Kualitas Gambar
-          </Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            {(["high", "low"] as const).map((q) => (
-              <Pressable
-                key={q}
-                onPress={() => updateSetting({ imageQuality: q })}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  borderRadius: 10,
-                  backgroundColor: settings.imageQuality === q ? colors.text : colors.card,
-                  borderWidth: 1,
-                  borderColor: settings.imageQuality === q ? colors.text : colors.border,
-                }}
-              >
-                <Text
-                  style={{
-                    color: settings.imageQuality === q ? colors.bg : colors.subtext,
-                    fontWeight: settings.imageQuality === q ? "900" : "600",
-                  }}
-                >
-                  {q === "high" ? "High (HQ)" : "Low (Data Saver)"}
-                </Text>
-              </Pressable>
-            ))}
+            {/* Reader Background */}
+            <View>
+              <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>
+                Warna Latar Saat Membaca (Reader Background)
+              </Text>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {[
+                  { val: "black", label: "Hitam", color: "#000" },
+                  { val: "dark",  label: "Gelap", color: "#121218" },
+                  { val: "white", label: "Putih", color: "#FFF", txtColor: "#000" },
+                ].map((bg) => (
+                  <Pressable
+                    key={bg.val}
+                    onPress={() => updateSetting({ readerBg: bg.val as ReaderSettings["readerBg"] })}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 10,
+                      alignItems: "center",
+                      borderRadius: 10,
+                      backgroundColor: bg.color,
+                      borderWidth: 2,
+                      borderColor:
+                        settings.readerBg === bg.val
+                          ? isDark ? "#4A90E2" : "#005bb5"
+                          : "transparent",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: bg.txtColor || "#FFF",
+                        fontWeight: settings.readerBg === bg.val ? "900" : "600",
+                      }}
+                    >
+                      {bg.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           </View>
-        </View>
-
-        {/* Reader Background */}
-        <View>
-          <Text style={{ color: colors.subtext, fontWeight: "700", marginBottom: 10 }}>
-            Warna Latar Saat Membaca (Reader Background)
-          </Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            {[
-              { val: "black", label: "Hitam", color: "#000" },
-              { val: "dark",  label: "Gelap", color: "#121218" },
-              { val: "white", label: "Putih", color: "#FFF", txtColor: "#000" },
-            ].map((bg) => (
-              <Pressable
-                key={bg.val}
-                onPress={() => updateSetting({ readerBg: bg.val as ReaderSettings["readerBg"] })}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  borderRadius: 10,
-                  backgroundColor: bg.color,
-                  borderWidth: 2,
-                  borderColor:
-                    settings.readerBg === bg.val
-                      ? isDark ? "#4A90E2" : "#005bb5"
-                      : "transparent",
-                }}
-              >
-                <Text
-                  style={{
-                    color: bg.txtColor || "#FFF",
-                    fontWeight: settings.readerBg === bg.val ? "900" : "600",
-                  }}
-                >
-                  {bg.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      </View>
+        </>
+      )}
     </ScrollView>
   );
 }

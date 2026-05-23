@@ -33,9 +33,28 @@ export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouse
   const { width } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const ITEM_WIDTH = width * 0.80;   // lebih lebar (dari 0.88)
-  const ITEM_HEIGHT = 390;           // lebih tinggi (dari 220)
-  const SPACING = 20;                // sedikit lebih lebar gap (dari 12)
+  const ITEM_WIDTH = width * 0.80;
+  const ITEM_HEIGHT = 390;
+  const SPACING = 20;
+
+  const flatListRef = useRef<FlatList>(null);
+
+  // Auto-slide logic
+  React.useEffect(() => {
+    if (!items || items.length === 0) return;
+    const interval = setInterval(() => {
+      let nextIndex = activeIndex + 1;
+      if (nextIndex >= items.length) {
+        nextIndex = 0;
+      }
+      flatListRef.current?.scrollToIndex({
+        index: nextIndex,
+        animated: true,
+      });
+    }, 4000); // Ganti slide setiap 4 detik
+
+    return () => clearInterval(interval);
+  }, [activeIndex, items]);
 
   const handleViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -54,15 +73,29 @@ export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouse
   return (
     <View style={{ marginBottom: 24 }}>
       <FlatList
+        ref={flatListRef}
         data={items}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyExtractor={(it) => it.manga_id}
         snapToInterval={ITEM_WIDTH + SPACING}
+        snapToAlignment="start"
         decelerationRate="fast"
-        contentContainerStyle={{ paddingHorizontal: 16, gap: SPACING }}
+        disableIntervalMomentum={true}
+        contentContainerStyle={{ paddingHorizontal: 16 }}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
+        getItemLayout={(_, index) => ({
+          length: ITEM_WIDTH + SPACING,
+          offset: (ITEM_WIDTH + SPACING) * index,
+          index,
+        })}
+        onScrollToIndexFailed={(info) => {
+          const wait = new Promise(resolve => setTimeout(resolve, 100));
+          wait.then(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          });
+        }}
         renderItem={({ item }) => {
           const format = item.taxonomy?.Format?.[0]?.name || item.taxonomy?.Type?.[0]?.name;
           const coverUrl = item.cover_image_url || item.cover_portrait_url;
@@ -73,6 +106,7 @@ export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouse
               style={({ pressed }) => ({
                 width: ITEM_WIDTH,
                 height: ITEM_HEIGHT,
+                marginRight: SPACING, // Ganti gap dengan marginRight
                 opacity: pressed ? 0.9 : 1,
               })}
             >

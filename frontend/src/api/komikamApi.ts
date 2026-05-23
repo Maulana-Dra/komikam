@@ -188,6 +188,7 @@ export type ApiSettings = {
   reader_image_quality?: "high" | "low";
   reader_bg?: "black" | "dark" | "white";
   theme_mode?: "light" | "dark" | "system";
+  reading_mode?: "scroll";
 };
 
 export async function apiGetSettings(): Promise<ApiSettings> {

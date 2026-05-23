@@ -5,11 +5,9 @@ import React from "react";
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   FlatList,
   Platform,
   Image as RNImage,
-  PanResponder,
   Pressable,
   ScrollView,
   View,
@@ -17,9 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
-import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getChapterDetail, getChapterList, getMangaDetail } from "../../src/api/shngmClient";
-import type { 
+import type {
   ShngmChapter,
   ShngmChapterDetailData,
 } from "../../src/api/shngmTypes";
@@ -34,6 +31,13 @@ import {
   setReaderSettings,
 } from "../../src/store/readerSettings";
 
+// Type harus di atas semua komponen yang memakainya
+type PageItem = {
+  key: string;
+  index: number;
+  url: string;
+};
+
 function joinUrl(base: string, path: string, filename: string) {
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
   const p = path.startsWith("/") ? path : `/${path}`;
@@ -41,53 +45,39 @@ function joinUrl(base: string, path: string, filename: string) {
   return `${b}${pp}${filename}`;
 }
 
-type PageItem = {
-  key: string;
-  index: number;
-  url: string;
-};
-
 function PageImage({
   uri,
   onSingleTap,
   bg,
-  contentWidth,
 }: {
   uri: string;
   onSingleTap: () => void;
   bg: string;
-  contentWidth: number;
 }) {
-  const screenW = Dimensions.get("window").width;
-  const imgW = contentWidth;
-  const [height, setHeight] = React.useState<number>(imgW * 1.4);
+  const { width: windowW } = useWindowDimensions();
+  const imageWidth = Math.min(680, windowW);
+  // default rasio 3:4 (portrait manga), akan dikoreksi setelah getSize
+  const [imgHeight, setImgHeight] = React.useState<number>(imageWidth * (4 / 3));
   const lastTapRef = React.useRef<number>(0);
   const tapTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const scale = React.useRef(new Animated.Value(1)).current;
   const zoomedRef = React.useRef<boolean>(false);
 
+  // Hitung tinggi berdasarkan aspek rasio asli gambar
   React.useEffect(() => {
     let alive = true;
-
     RNImage.getSize(
       uri,
-      (w: number, h: number) => {
-        if (!alive) return;
-        setHeight(imgW * (h / w));
-      },
-      () => {
-        // fallback: biarin height default
-      },
+      (w, h) => { if (alive) setImgHeight(imageWidth * (h / w)); },
+      () => { /* gunakan default */ },
     );
-
     return () => {
       alive = false;
-      if (tapTimerRef.current) {
-        clearTimeout(tapTimerRef.current);
-      }
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
     };
-  }, [uri, screenW]);
+  }, [uri, imageWidth]);
 
+  // Reset zoom saat gambar berubah
   React.useEffect(() => {
     zoomedRef.current = false;
     scale.setValue(1);
@@ -95,45 +85,45 @@ function PageImage({
 
   const handleTap = React.useCallback(() => {
     const now = Date.now();
-
-    if (now - lastTapRef.current < 250) {
-      if (tapTimerRef.current) {
-        clearTimeout(tapTimerRef.current);
-        tapTimerRef.current = null;
-      }
-
+    if (now - lastTapRef.current < 300) {
+      // double tap → toggle zoom
+      if (tapTimerRef.current) { clearTimeout(tapTimerRef.current); tapTimerRef.current = null; }
       lastTapRef.current = 0;
       const next = !zoomedRef.current;
       zoomedRef.current = next;
-      Animated.timing(scale, {
+      Animated.spring(scale, {
         toValue: next ? 2 : 1,
-        duration: 180,
         useNativeDriver: true,
+        speed: 20,
+        bounciness: 4,
       }).start();
       return;
     }
-
     lastTapRef.current = now;
     tapTimerRef.current = setTimeout(() => {
       onSingleTap();
       tapTimerRef.current = null;
-    }, 260);
+    }, 310);
   }, [onSingleTap, scale]);
 
   return (
-    <Pressable onPress={handleTap}>
-      <View style={{ width: screenW, backgroundColor: bg, alignItems: "center" }}>
-        <Animated.View style={{ width: imgW, height, transform: [{ scale }] }}>
-          <ExpoImage
-            source={{ uri }}
-            style={{ width: "100%", height: "100%" }}
-            contentFit="cover"
-            cachePolicy="disk"
-            transition={0}
-            allowDownscaling={false}
-          />
-        </Animated.View>
-      </View>
+    <Pressable onPress={handleTap} style={{ backgroundColor: bg, alignItems: "center", width: "100%" }}>
+      {/* Gambar mengisi lebar penuh layar, tinggi menyesuaikan aspek rasio */}
+      <Animated.View
+        style={{
+          width: imageWidth,
+          height: imgHeight,
+          transform: [{ scale }],
+        }}
+      >
+        <ExpoImage
+          source={{ uri }}
+          style={{ width: "100%", height: "100%" }}
+          contentFit="fill"
+          cachePolicy="disk"
+          transition={0}
+        />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -151,25 +141,10 @@ export default function ReaderScreen() {
   const safeTitle = typeof mangaTitle === "string" ? mangaTitle : "";
   const safeCoverUrl = typeof coverUrl === "string" ? coverUrl : "";
 
-  const { resolved } = useAppTheme();
-  const isDark = resolved === "dark";
   const insets = useSafeAreaInsets();
-  const colors = React.useMemo(
-    () => ({
-      bg: isDark ? "#0B0B0E" : "#F6F1E9",
-      text: isDark ? "#F2F2F7" : "#1E2329",
-      subtext: isDark ? "#B3B3C2" : "#6A625A",
-      border: isDark ? "#242434" : "#E6DED2",
-      header: isDark ? "#121218" : "#FBF6EE",
-      headerBtn: isDark ? "#1A1A24" : "#EFE6DA",
-      headerBtnText: isDark ? "#F2F2F7" : "#1E2329",
-    }),
-    [isDark],
-  );
 
   const { width: screenWidth } = useWindowDimensions();
-  const isDesktop = screenWidth >= 1024; // Naikkan threshold ke 1024 agar tidak kena di HP high-res
-  const contentWidth = isDesktop ? Math.min(800, screenWidth * 0.8) : screenWidth;
+  const isDesktop = screenWidth >= 1024;
 
   const [fetchedMangaTitle, setFetchedMangaTitle] = React.useState<string | null>(null);
   const [fetchedCoverUrl, setFetchedCoverUrl] = React.useState<string | null>(null);
@@ -182,17 +157,11 @@ export default function ReaderScreen() {
   const [chapterNumber, setChapterNumber] = React.useState<number>(0);
   const [currentIndex, setCurrentIndex] = React.useState<number>(0);
   const [controlsVisible, setControlsVisible] = React.useState<boolean>(true);
-  const [sliderWidth, setSliderWidth] = React.useState<number>(0);
-  const [sliderPageX, setSliderPageX] = React.useState<number>(0);
-  const [isScrubbing, setIsScrubbing] = React.useState<boolean>(false);
-  const [scrubIndex, setScrubIndex] = React.useState<number | null>(null);
   const [resumeIndex, setResumeIndex] = React.useState<number | null>(null);
   const [resumeVisible, setResumeVisible] = React.useState<boolean>(false);
 
   const listRef = React.useRef<FlatList<PageItem>>(null);
-  const sliderRef = React.useRef<View>(null);
   const resumeCheckedRef = React.useRef<string>("");
-  const scrubIndexRef = React.useRef<number | null>(null);
 
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -201,7 +170,10 @@ export default function ReaderScreen() {
   const [settings, setSettings] = React.useState<ReaderSettings>({
     imageQuality: "high",
     readerBg: "black",
+    readingMode: "scroll",
   });
+
+
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const settingsAnim = React.useRef(new Animated.Value(0)).current;
   const [chapterListVisible, setChapterListVisible] = React.useState(false);
@@ -262,6 +234,8 @@ export default function ReaderScreen() {
     }));
   }, [chapterData, settings.imageQuality]);
 
+
+
   const load = React.useCallback(async () => {
     if (!id) return;
 
@@ -287,14 +261,9 @@ export default function ReaderScreen() {
       setPrevId(d.prev_chapter_id);
       setNextId(d.next_chapter_id);
 
-      const base = d.base_url;
-      const path = d.chapter.path;
-
       setChapterData(d);
 
       setCurrentIndex(0);
-      setScrubIndex(null);
-      scrubIndexRef.current = null;
       setResumeIndex(null);
       setResumeVisible(false);
     } catch (e) {
@@ -303,7 +272,7 @@ export default function ReaderScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, safeCoverUrl, safeTitle]);
 
   React.useEffect(() => {
     void load();
@@ -379,7 +348,7 @@ export default function ReaderScreen() {
   progressDataRef.current = { mangaId, id, chapterNumber, totalPages: pages.length, safeTitle: fetchedMangaTitle || safeTitle, safeCoverUrl: fetchedCoverUrl || safeCoverUrl };
 
   const onViewableItemsChanged = React.useRef(
-    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       const first = viewableItems
         .map((v) => v.index)
         .find((idx): idx is number => typeof idx === "number" && idx >= 0);
@@ -429,58 +398,7 @@ export default function ReaderScreen() {
   );
 
   const totalPages = pages.length;
-  const displayIndex =
-    isScrubbing && scrubIndex !== null ? scrubIndex : currentIndex;
-  const pageLabel =
-    totalPages > 0 ? `${displayIndex + 1} / ${totalPages}` : "0 / 0";
-  const progress = totalPages > 0 ? (displayIndex + 1) / totalPages : 0;
-  const sliderPadding = 10;
-  const sliderUsable = Math.max(1, sliderWidth - sliderPadding * 2);
-
-  const handleSliderTouch = React.useCallback(
-    (x: number) => {
-      if (totalPages <= 0 || sliderUsable <= 0) return;
-      const localX = Math.max(0, Math.min(sliderUsable, x - sliderPadding));
-      const ratio = Math.max(0, Math.min(1, localX / sliderUsable));
-      const idx = Math.min(
-        totalPages - 1,
-        Math.max(0, Math.round(ratio * (totalPages - 1))),
-      );
-      setScrubIndex(idx);
-      scrubIndexRef.current = idx;
-    },
-    [sliderPadding, sliderUsable, totalPages],
-  );
-
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: (event) => {
-          setIsScrubbing(true);
-          const localX = event.nativeEvent.pageX - sliderPageX;
-          handleSliderTouch(localX);
-        },
-        onPanResponderMove: (event) => {
-          const localX = event.nativeEvent.pageX - sliderPageX;
-          handleSliderTouch(localX);
-        },
-        onPanResponderRelease: () => {
-          setIsScrubbing(false);
-          const target = scrubIndexRef.current;
-          if (target !== null) {
-            scrollToIndex(target);
-          }
-          scrubIndexRef.current = null;
-        },
-        onPanResponderTerminate: () => {
-          setIsScrubbing(false);
-          scrubIndexRef.current = null;
-        },
-      }),
-    [handleSliderTouch, scrollToIndex, sliderPageX],
-  );
+  const pageLabel = totalPages > 0 ? `Halaman ${currentIndex + 1} / ${totalPages}` : "0 / 0";
 
   if (loading) {
     return (
@@ -628,7 +546,7 @@ export default function ReaderScreen() {
         </View>
       )}
  
-      {/* ── Pages ──────────────────────────────────────────── */}
+      {/* ── Pages: Scroll Mode ─────────────── */}
       <FlatList
         ref={listRef}
         data={pages}
@@ -639,7 +557,6 @@ export default function ReaderScreen() {
             uri={item.url}
             onSingleTap={handleToggleControls}
             bg={pageBg}
-            contentWidth={contentWidth}
           />
         )}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -721,6 +638,8 @@ export default function ReaderScreen() {
             <Text style={{ color: "rgba(242,242,247,0.55)", fontSize: 11, marginBottom: 10, fontWeight: "700" }}>
               {pageLabel}
             </Text>
+
+
 
             {/* 4 box buttons row */}
             <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
@@ -888,6 +807,8 @@ export default function ReaderScreen() {
               </Pressable>
             </View>
             <View style={{ gap: 20 }}>
+
+
               {/* Image Quality */}
               <View>
                 <Text style={{ color: "#F2F2F7", fontWeight: "700", marginBottom: 10 }}>Kualitas Gambar</Text>

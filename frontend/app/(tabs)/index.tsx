@@ -931,7 +931,7 @@ export default function HomeScreen() {
         }}
       >
         <Text style={{ fontSize: 24, fontWeight: "900", color: colors.text }}>
-          ItzKomik
+          Komikam
         </Text>
 
         <View

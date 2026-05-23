@@ -1,7 +1,7 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   apiGetHistory,
   apiUpsertHistory,
-  apiDeleteHistory,
   apiClearHistory,
   KomikamAuthError,
   type ApiHistory,
@@ -32,14 +32,22 @@ function fromApi(item: ApiHistory): ReadingProgress {
 }
 
 export async function upsertProgress(p: ReadingProgress): Promise<void> {
-  await apiUpsertHistory(p.mangaId, {
-    chapter_id:     p.chapterId,
-    chapter_number: p.chapterNumber,
-    page_index:     p.pageIndex,
-    total_pages:    p.totalPages,
-    manga_title:    p.mangaTitle ?? null,
-    cover_url:      p.coverUrl ?? null,
-  });
+  try {
+    await apiUpsertHistory(p.mangaId, {
+      chapter_id:     p.chapterId,
+      chapter_number: p.chapterNumber,
+      page_index:     p.pageIndex,
+      total_pages:    p.totalPages,
+      manga_title:    p.mangaTitle ?? null,
+      cover_url:      p.coverUrl ?? null,
+    });
+  } catch (e) {
+    if (e instanceof KomikamAuthError) {
+      // Abaikan jika belum login (tidak perlu menyimpan riwayat ke server)
+      return;
+    }
+    throw e;
+  }
 }
 
 export async function getAllHistory(limit?: number): Promise<ReadingProgress[]> {
@@ -86,7 +94,6 @@ export async function replaceHistory(items: ReadingProgress[]): Promise<void> {
   }
 }
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const READ_CHAPTERS_KEY = "read_chapters:";
 

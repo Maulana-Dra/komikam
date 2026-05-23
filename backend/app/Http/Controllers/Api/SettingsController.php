@@ -13,6 +13,7 @@ class SettingsController extends Controller
         'reader_image_quality',
         'reader_bg',
         'theme_mode',
+        'reading_mode',
     ];
 
     /**
@@ -43,6 +44,7 @@ class SettingsController extends Controller
             'reader_image_quality' => ['sometimes', 'string', 'in:high,low'],
             'reader_bg'            => ['sometimes', 'string', 'in:black,dark,white'],
             'theme_mode'           => ['sometimes', 'string', 'in:light,dark,system'],
+            'reading_mode'         => ['sometimes', 'string', 'in:scroll,slide'],
         ]);
 
         $userId = $request->user()->id;
