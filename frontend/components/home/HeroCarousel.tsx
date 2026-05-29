@@ -31,15 +31,18 @@ type HeroCarouselProps = {
 
 export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouselProps) {
   const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  const contentPadding = isDesktop ? 24 : 12;
+  const containerWidth = Math.min(1600, width) - 2 * contentPadding;
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const ITEM_WIDTH = width * 0.80;
-  const ITEM_HEIGHT = 390;
+  const ITEM_WIDTH = isDesktop ? Math.min(800, containerWidth) : containerWidth - 40;
+  const ITEM_HEIGHT = isDesktop ? 390 : 440;
   const SPACING = 20;
+ 
+  const flatListRef = useRef<FlatList>(null); 
 
-  const flatListRef = useRef<FlatList>(null);
-
-  // Auto-slide logic
+  // Auto-slide logic 
   React.useEffect(() => {
     if (!items || items.length === 0) return;
     const interval = setInterval(() => {
@@ -82,7 +85,7 @@ export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouse
         snapToAlignment="start"
         decelerationRate="fast"
         disableIntervalMomentum={true}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 0 }}
         onViewableItemsChanged={handleViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={(_, index) => ({

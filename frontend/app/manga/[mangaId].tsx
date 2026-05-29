@@ -9,9 +9,12 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Text } from "@/components/ui/app-text";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -20,6 +23,7 @@ import { getChapterList, getMangaDetail } from "../../src/api/shngmClient";
 import type { ShngmChapter, ShngmManga } from "../../src/api/shngmTypes";
 import { isBookmarked, toggleBookmark } from "../../src/store/bookmarks";
 import { getLatestProgressByManga, getReadChaptersLocal } from "../../src/store/history";
+import { getToken } from "../../src/store/authToken";
 
 type ResumeState = {
   chapterId: string;
@@ -67,6 +71,9 @@ export default function MangaDetailScreen() {
   const { resolved } = useAppTheme();
   const isDark = resolved === "dark";
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isWide = screenWidth >= 768;
+  const contentPadding = isWide ? 24 : 16;
 
   const colors = React.useMemo(
     () => ({
@@ -192,6 +199,67 @@ export default function MangaDetailScreen() {
     };
   }, [state.manga]);
 
+  const metadataSections = React.useMemo(() => {
+    if (!displayMeta) return [];
+    const list = [];
+
+    // Genre
+    if (displayMeta.genres && displayMeta.genres.length > 0) {
+      list.push({
+        key: "genres",
+        label: "Genre",
+        items: displayMeta.genres.map((g) => g.name),
+      });
+    }
+
+    // Author
+    if (displayMeta.authors) {
+      list.push({
+        key: "authors",
+        label: "Author",
+        items: displayMeta.authors.length > 0 ? displayMeta.authors.map((a) => a.name) : ["Menyusul"],
+      });
+    }
+
+    // Artist
+    if (displayMeta.artists) {
+      list.push({
+        key: "artists",
+        label: "Artist",
+        items: displayMeta.artists.length > 0 ? displayMeta.artists.map((a) => a.name) : ["Menyusul"],
+      });
+    }
+
+    // Format
+    if (displayMeta.formats && displayMeta.formats.length > 0) {
+      list.push({
+        key: "formats",
+        label: "Format",
+        items: displayMeta.formats.map((f) => f.name),
+      });
+    }
+
+    // Type
+    if (displayMeta.types && displayMeta.types.length > 0) {
+      list.push({
+        key: "types",
+        label: "Type",
+        items: displayMeta.types.map((t) => t.name),
+      });
+    }
+
+    // Country
+    if (displayCountryId) {
+      list.push({
+        key: "country",
+        label: "Country",
+        items: [displayCountryId],
+      });
+    }
+
+    return list;
+  }, [displayMeta, displayCountryId]);
+
   React.useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 1800);
@@ -200,6 +268,15 @@ export default function MangaDetailScreen() {
 
   const loadResume = React.useCallback(async () => {
     if (!id) return;
+
+    const token = await getToken();
+    if (!token) {
+      setResume(null);
+      const localRead = await getReadChaptersLocal(id);
+      setReadChapters(localRead);
+      return;
+    }
+
     const [progress, localRead] = await Promise.all([
       getLatestProgressByManga(id),
       getReadChaptersLocal(id),
@@ -265,7 +342,7 @@ export default function MangaDetailScreen() {
         error: msg,
       }));
     }
-  }, [id, loadResume, loadBookmarkState]);
+  }, [id, loadResume, loadBookmarkState, sortDir]);
 
   const loadMore = React.useCallback(async () => {
     if (!id) return;
@@ -310,7 +387,7 @@ export default function MangaDetailScreen() {
       if (isOfflineError(e)) setOffline(true);
       setState((s) => ({ ...s, loadingMore: false, error: msg }));
     }
-  }, [id]);
+  }, [id, sortDir]);
 
   React.useEffect(() => {
     void load();
@@ -344,6 +421,7 @@ export default function MangaDetailScreen() {
     });
     return copy;
   }, [state.chapters, sortDir, searchQuery]);
+
   const jumpIndex = React.useMemo(() => {
     if (orderedChapters.length === 0) return 0;
     
@@ -397,138 +475,41 @@ export default function MangaDetailScreen() {
       </Text>
     </Pressable>
   ) : null;
-  const bottomInset = (resume ? 120 : 24) + (toast ? 40 : 0);
+  const bottomInset = insets.bottom + (resume ? 100 : 0) + (toast ? 60 : 0) + 40;
 
   if (state.loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View style={{ padding: 12, gap: 12, paddingTop: insets.top + 12 }}>
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 16,
-              padding: 12,
-              flexDirection: "row",
-              gap: 12,
-            }}
-          >
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
+          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding, paddingTop: insets.top + 24, gap: 16 }}>
+            {/* Header Detail Skeleton */}
             <View
-              style={{
-                width: 96,
-                height: 128,
-                borderRadius: 14,
-                backgroundColor: colors.shimmerBase,
-                overflow: "hidden",
-              }}
-            >
-              <Animated.View style={shimmerOverlayStyle(96, 14)} />
-            </View>
-
-            <View style={{ flex: 1, gap: 8 }}>
-              <View
-                style={{
-                  height: 18,
-                  borderRadius: 6,
-                  backgroundColor: colors.shimmerBase,
-                  overflow: "hidden",
-                }}
-              >
-                <Animated.View style={shimmerOverlayStyle(220, 6)} />
-              </View>
-              <View
-                style={{
-                  height: 12,
-                  borderRadius: 6,
-                  backgroundColor: colors.shimmerBase,
-                  width: 180,
-                  overflow: "hidden",
-                }}
-              >
-                <Animated.View style={shimmerOverlayStyle(180, 6)} />
-              </View>
-              <View
-                style={{
-                  height: 12,
-                  borderRadius: 6,
-                  backgroundColor: colors.shimmerBase,
-                  width: 140,
-                  overflow: "hidden",
-                }}
-              >
-                <Animated.View style={shimmerOverlayStyle(140, 6)} />
-              </View>
-              <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
-                <View
-                  style={{
-                    width: 70,
-                    height: 28,
-                    borderRadius: 999,
-                    backgroundColor: colors.shimmerBase,
-                    overflow: "hidden",
-                  }}
-                >
-                  <Animated.View style={shimmerOverlayStyle(70, 999)} />
-                </View>
-                <View
-                  style={{
-                    width: 70,
-                    height: 28,
-                    borderRadius: 999,
-                    backgroundColor: colors.shimmerBase,
-                    overflow: "hidden",
-                  }}
-                >
-                  <Animated.View style={shimmerOverlayStyle(70, 999)} />
-                </View>
-              </View>
-            </View>
-          </View>
-
-          <View
-            style={{
-              height: 44,
-              borderRadius: 14,
-              backgroundColor: colors.shimmerBase,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(320, 14)} />
-          </View>
-        </View>
-
-        <View style={{ paddingHorizontal: 12 }}>
-          {Array.from({ length: 8 }).map((_, idx) => (
-            <View
-              key={`chapter-skeleton-${idx}`}
               style={{
                 backgroundColor: colors.card,
                 borderWidth: 1,
                 borderColor: colors.border,
                 borderRadius: 16,
-                padding: 12,
+                padding: 16,
                 flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 12,
+                gap: 16,
               }}
             >
               <View
                 style={{
-                  width: 56,
-                  height: 56,
+                  width: 96,
+                  height: 128,
                   borderRadius: 14,
                   backgroundColor: colors.shimmerBase,
                   overflow: "hidden",
                 }}
               >
-                <Animated.View style={shimmerOverlayStyle(56, 14)} />
+                <Animated.View style={shimmerOverlayStyle(96, 14)} />
               </View>
-              <View style={{ flex: 1, gap: 6 }}>
+
+              <View style={{ flex: 1, gap: 8 }}>
                 <View
                   style={{
-                    height: 14,
+                    height: 18,
                     borderRadius: 6,
                     backgroundColor: colors.shimmerBase,
                     overflow: "hidden",
@@ -547,10 +528,111 @@ export default function MangaDetailScreen() {
                 >
                   <Animated.View style={shimmerOverlayStyle(180, 6)} />
                 </View>
+                <View
+                  style={{
+                    height: 12,
+                    borderRadius: 6,
+                    backgroundColor: colors.shimmerBase,
+                    width: 140,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Animated.View style={shimmerOverlayStyle(140, 6)} />
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+                  <View
+                    style={{
+                      width: 70,
+                      height: 28,
+                      borderRadius: 999,
+                      backgroundColor: colors.shimmerBase,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(70, 999)} />
+                  </View>
+                  <View
+                    style={{
+                      width: 70,
+                      height: 28,
+                      borderRadius: 999,
+                      backgroundColor: colors.shimmerBase,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(70, 999)} />
+                  </View>
+                </View>
               </View>
             </View>
-          ))}
-        </View>
+
+            {/* Actions / Search Bar Skeleton */}
+            <View
+              style={{
+                height: 48,
+                borderRadius: 14,
+                backgroundColor: colors.shimmerBase,
+                overflow: "hidden",
+              }}
+            >
+              <Animated.View style={shimmerOverlayStyle(screenWidth - 32, 14)} />
+            </View>
+
+            {/* Chapters Skeleton */}
+            <View style={{ gap: 12 }}>
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <View
+                  key={`chapter-skeleton-${idx}`}
+                  style={{
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 16,
+                    padding: 16,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 16,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 14,
+                      backgroundColor: colors.shimmerBase,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(56, 14)} />
+                  </View>
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <View
+                      style={{
+                        height: 14,
+                        borderRadius: 6,
+                        backgroundColor: colors.shimmerBase,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Animated.View style={shimmerOverlayStyle(220, 6)} />
+                    </View>
+                    <View
+                      style={{
+                        height: 12,
+                        borderRadius: 6,
+                        backgroundColor: colors.shimmerBase,
+                        width: 180,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <Animated.View style={shimmerOverlayStyle(180, 6)} />
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -561,791 +643,519 @@ export default function MangaDetailScreen() {
         style={{
           flex: 1,
           backgroundColor: colors.bg,
-          padding: 24,
-          alignItems: "center",
           justifyContent: "center",
-          gap: 16,
-          paddingTop: insets.top + 16,
+          alignItems: "center",
+          paddingHorizontal: contentPadding,
         }}
       >
-        <View
-          style={{
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: colors.ghost,
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 8,
-          }}
-        >
-          <IconSymbol
-            name={offline ? "wifi.slash" : "exclamationmark.triangle.fill"}
-            size={40}
-            color={colors.text}
-          />
-        </View>
-        <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" }}>
-          {offline ? "Kamu Sedang Offline" : "Gagal load"}
-        </Text>
-        <Text style={{ fontSize: 16, color: colors.subtext, textAlign: "center", paddingHorizontal: 20 }}>
-          {offline ? "Cek koneksi internetmu lalu coba muat ulang halaman ini." : state.error}
-        </Text>
-
-        <Pressable
-          onPress={() => void load()}
-          style={({ pressed }) => ({
-            marginTop: 10,
-            paddingVertical: 14,
-            paddingHorizontal: 32,
-            backgroundColor: colors.text,
-            borderRadius: 999,
-            opacity: pressed ? 0.8 : 1,
-            shadowColor: colors.text,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.2,
-            shadowRadius: 8,
-            elevation: 4,
-          })}
-        >
-          <Text style={{ color: colors.bg, fontWeight: "900", fontSize: 16 }}>
-            {offline ? "Coba Lagi" : "Retry"}
+        <View style={{ width: "100%", maxWidth: 500, alignItems: "center", gap: 16 }}>
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: colors.ghost,
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 8,
+            }}
+          >
+            <IconSymbol
+              name={offline ? "wifi.slash" : "exclamationmark.triangle.fill"}
+              size={40}
+              color={colors.text}
+            />
+          </View>
+          <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" }}>
+            {offline ? "Kamu Sedang Offline" : "Gagal load"}
           </Text>
-        </Pressable>
+          <Text style={{ fontSize: 16, color: colors.subtext, textAlign: "center", paddingHorizontal: 20 }}>
+            {offline ? "Cek koneksi internetmu lalu coba muat ulang halaman ini." : state.error}
+          </Text>
+
+          <Pressable
+            onPress={() => void load()}
+            style={({ pressed }) => ({
+              marginTop: 10,
+              paddingVertical: 14,
+              paddingHorizontal: 32,
+              backgroundColor: colors.text,
+              borderRadius: 999,
+              opacity: pressed ? 0.8 : 1,
+              shadowColor: colors.text,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 8,
+              elevation: 4,
+            })}
+          >
+            <Text style={{ color: colors.bg, fontWeight: "900", fontSize: 16 }}>
+              {offline ? "Coba Lagi" : "Retry"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   const header = (
-    <View style={{ backgroundColor: colors.bg, padding: 12, gap: 12 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Pressable
-            onPress={() => router.push("/")}
-            style={{
-              padding: 10,
-              borderRadius: 999,
-              backgroundColor: colors.chip,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <IconSymbol name="chevron.left" size={24} color={colors.text} />
-          </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "900", color: colors.text }}>
-            Detail
-          </Text>
-        </View>
-        {offline && (
-          <View
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 999,
-              backgroundColor: colors.ghost,
-              borderWidth: 1,
-              borderColor: colors.border,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <IconSymbol name="wifi.slash" size={14} color={colors.subtext} />
-            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-              Offline
-            </Text>
-          </View>
-        )}
-      </View>
-      <View
-        style={{
-          backgroundColor: colors.card,
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderRadius: 16,
-          padding: 12,
-          flexDirection: "row",
-          gap: 12,
-        }}
-      >
+    <View style={{ backgroundColor: colors.bg, paddingBottom: 16 }}>
+      {/* ── Hero Blurred Banner ── */}
+      <View style={{ width: "100%", height: 260, backgroundColor: "#000", overflow: "hidden" }}>
         <ExpoImage
-          source={{
-            uri: displayCover,
-          }}
-          style={{
-            width: 96,
-            height: 128,
-            borderRadius: 14,
-            backgroundColor: colors.chip,
-          }}
+          source={{ uri: displayCover }}
+          style={{ width: "100%", height: "100%", opacity: 0.45 }}
+          blurRadius={18}
           contentFit="cover"
-          cachePolicy="memory-disk"
-          transition={120}
         />
-        <View style={{ flex: 1, gap: 8 }}>
+        <LinearGradient
+          colors={["rgba(11,11,14,0.1)", "rgba(11,11,14,0.5)", "rgba(11,11,14,0.85)", "#0B0B0E"]}
+          style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+        />
+        
+        {/* Floating Nav Bar (Back & Home buttons centered on wide viewport) */}
+        <View style={{ position: "absolute", top: 16, left: 0, right: 0, alignItems: "center", zIndex: 12 }}>
+          <View style={{ width: "100%", maxWidth: 1000, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: contentPadding }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Pressable
+                onPress={() => router.back()}
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 21,
+                  backgroundColor: "rgba(14,14,20,0.65)",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.12)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="arrow-back" size={20} color="#FFF" />
+              </Pressable>
+              {offline && (
+                <View
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 999,
+                    backgroundColor: "rgba(26,26,36,0.85)",
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <Ionicons name="wifi-outline" size={14} color="#FFF" />
+                  <Text style={{ color: "#FFF", fontWeight: "800", fontSize: 12 }}>
+                    Offline
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <Pressable
+              onPress={() => router.push("/")}
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: "rgba(14,14,20,0.65)",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.12)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="home-outline" size={20} color="#FFF" />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      {/* ── Content Container (Centered & Responsive Margin) ── */}
+      <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding }}>
+        <View style={{ flexDirection: isWide ? "row" : "column", marginTop: -100, alignItems: isWide ? "flex-end" : "center", gap: 16, zIndex: 10 }}>
+          <ExpoImage
+            source={{ uri: displayCover }}
+            style={{ width: isWide ? 160 : 140, height: isWide ? 240 : 210, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)", backgroundColor: colors.chip }}
+            contentFit="cover" cachePolicy="memory-disk" transition={120}
+          />
+          <View style={{ flex: isWide ? 1 : undefined, alignItems: isWide ? "flex-start" : "center", paddingBottom: isWide ? 8 : 0, gap: 4 }}>
+            <Text
+              style={{ 
+                fontSize: 24, 
+                fontWeight: "900", 
+                color: "#FFF", 
+                textShadowColor: "rgba(0,0,0,0.85)", 
+                textShadowOffset: { width: 0, height: 2 }, 
+                textShadowRadius: 4,
+                textAlign: isWide ? "left" : "center"
+              }}
+              numberOfLines={2}
+            >
+              {displayTitle}
+            </Text>
+            {!!state.manga?.alternative_title && (
+              <Text 
+                style={{ 
+                  fontSize: 13, 
+                  fontWeight: "600", 
+                  color: "rgba(242,242,247,0.6)",
+                  textAlign: isWide ? "left" : "center" 
+                }} 
+                numberOfLines={1}
+              >
+                {state.manga.alternative_title}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* ── Buttons & Stats Row ── */}
+        {(() => {
+          const stats = [
+            { icon: "star", color: "#FF9F43", value: typeof displayUserRate === "number" ? displayUserRate.toFixed(1) : "-" },
+            { icon: "bookmark", color: "#00D2D3", value: displayMeta ? formatCount(displayMeta.bookmarks) : "0" },
+            { icon: "eye", color: "#54A0FF", value: displayMeta ? formatCount(displayMeta.views) : "0" },
+            { icon: "trophy", color: "#9B59B6", value: state.manga?.rank ? `#${state.manga.rank}` : "-" },
+          ];
+
+          const buttonStyle = {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "center" as const,
+            paddingVertical: 10,
+            paddingHorizontal: 16,
+            borderRadius: 10,
+            gap: 6,
+            ...(isWide ? {} : { flex: 1 }),
+          };
+
+          const bacaBtn = (
+            <Pressable
+              onPress={() => {
+                const targetId = resume?.chapterId ?? state.manga?.latest_chapter_id;
+                if (targetId) {
+                  router.push(`/reader/${targetId}`);
+                }
+              }}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#6C5CE7",
+              }}
+            >
+              <Ionicons name="play" size={17} color="#FFF" />
+              <Text style={{ color: "#FFF", fontWeight: "900", fontSize: 16 }}>
+                {resume ? "Lanjut" : "Baca"}
+              </Text>
+            </Pressable>
+          );
+
+          const bookmarkBtn = (
+            <Pressable
+              onPress={async () => {
+                if (!id) return;
+                const cover = displayCover;
+                const next = await toggleBookmark({
+                  mangaId: id,
+                  title: displayTitle,
+                  coverUrl: cover,
+                });
+                setBookmarked(next);
+                setToast(next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark");
+              }}
+              style={{
+                ...buttonStyle,
+                backgroundColor: "#2C2C35",
+              }}
+            >
+              <Ionicons name={bookmarked ? "bookmark" : "bookmark-outline"} size={17} color="#FFF" />
+              <Text style={{ color: "#FFF", fontWeight: "900", fontSize: 15 }}>
+                {bookmarked ? "Bookmarked" : "Bookmark"}
+              </Text>
+            </Pressable>
+          );
+
+          const statsRow = (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 19 }}>
+              {stats.map((s, idx) => (
+                <View key={idx} style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                  <Ionicons name={s.icon as any} size={21} color={s.color} />
+                  <Text style={{ color: "#F2F2F7", fontWeight: "700", fontSize: 15 }}>{s.value}</Text>
+                </View>
+              ))}
+            </View>
+          );
+
+          if (isWide) {
+            return (
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  {bacaBtn}
+                  {bookmarkBtn}
+                </View>
+                {statsRow}
+              </View>
+            );
+          }
+
+          return (
+            <View style={{ marginTop: 20, gap: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "center", gap: 10 }}>
+                {bacaBtn}
+                {bookmarkBtn}
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center", gap: 14 }}>
+                {statsRow}
+              </View>
+            </View>
+          );
+        })()}
+
+        {/* ── Description ── */}
+        <View style={{ marginTop: 18 }}>
           <Text
-            style={{ fontSize: 18, fontWeight: "900", color: colors.text }}
-            numberOfLines={2}
-          >
-            {displayTitle}
-          </Text>
-          <Text
-            style={{ color: colors.subtext, lineHeight: 18 }}
+            style={{ color: "rgba(255,255,255,0.9)", lineHeight: 22, fontSize: 14 }}
             numberOfLines={descExpanded ? 0 : 4}
           >
             {displayDescription}
           </Text>
           {showDescToggle && (
-            <Pressable onPress={() => setDescExpanded((v) => !v)}>
-              <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+            <Pressable onPress={() => setDescExpanded((v) => !v)} style={{ marginTop: 6 }}>
+              <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 13 }}>
                 {descExpanded ? "Show less" : "Read more"}
               </Text>
             </Pressable>
           )}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {displayCountryId && (
-              <View
-                style={{
-                  backgroundColor: colors.chip,
-                  paddingVertical: 6,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <IconSymbol name="flag.fill" size={14} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                  {displayCountryId}
-                </Text>
-              </View>
-            )}
-            {typeof displayUserRate === "number" && (
-              <View
-                style={{
-                  backgroundColor: colors.chip,
-                  paddingVertical: 6,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <IconSymbol name="star.fill" size={14} color={colors.subtext} />
-                <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                  {displayUserRate}
-                </Text>
-              </View>
-            )}
-          </View>
         </View>
-      </View>
 
-      {/* ── Metadata Section ── */}
-      {displayMeta && (
-        <View style={{ gap: 10 }}>
-          {/* Status + Release Year + Stats */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {/* Status badge */}
-            {displayMeta.status === 1 && (
-              <View
-                style={{
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  backgroundColor: "rgba(52,199,89,0.15)",
-                  borderWidth: 1,
-                  borderColor: "rgba(52,199,89,0.4)",
-                }}
-              >
-                <Text
-                  style={{ color: "#34C759", fontWeight: "800", fontSize: 12 }}
-                >
-                  Ongoing
-                </Text>
-              </View>
-            )}
-            {displayMeta.status === 2 && (
-              <View
-                style={{
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  backgroundColor: colors.chip,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text
+        {/* ── Metadata Chips Section (Genre, Author, Artist, Format, Type) ── */}
+        {metadataSections.length > 0 && (
+          <View
+            style={{
+              marginTop: 20,
+              flexDirection: isWide ? "row" : "column",
+              flexWrap: isWide ? "wrap" : undefined,
+              alignItems: isWide ? "center" : "stretch",
+              gap: isWide ? 16 : 14,
+            }}
+          >
+            {metadataSections.map((sec, idx) => (
+              <React.Fragment key={sec.key}>
+                <View
                   style={{
-                    color: colors.subtext,
-                    fontWeight: "800",
-                    fontSize: 12,
+                    flexDirection: "row",
+                    alignItems: isWide ? "center" : "flex-start",
+                    gap: 12,
                   }}
                 >
-                  Completed
-                </Text>
-              </View>
-            )}
-            {/* Release year */}
-            {!!displayMeta.year && (
-              <View
-                style={{
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  backgroundColor: colors.chip,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <IconSymbol name="calendar" size={12} color={colors.subtext} />
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontWeight: "800",
-                    fontSize: 12,
-                  }}
-                >
-                  {displayMeta.year}
-                </Text>
-              </View>
-            )}
-            {/* View count */}
-            {displayMeta.views > 0 && (
-              <View
-                style={{
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  backgroundColor: colors.chip,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <IconSymbol name="eye" size={12} color={colors.subtext} />
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontWeight: "800",
-                    fontSize: 12,
-                  }}
-                >
-                  {formatCount(displayMeta.views)}
-                </Text>
-              </View>
-            )}
-            {/* Bookmark count */}
-            {displayMeta.bookmarks > 0 && (
-              <View
-                style={{
-                  paddingVertical: 5,
-                  paddingHorizontal: 10,
-                  borderRadius: 999,
-                  backgroundColor: colors.chip,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 5,
-                }}
-              >
-                <IconSymbol name="bookmark" size={12} color={colors.subtext} />
-                <Text
-                  style={{
-                    color: colors.subtext,
-                    fontWeight: "800",
-                    fontSize: 12,
-                  }}
-                >
-                  {formatCount(displayMeta.bookmarks)}
-                </Text>
-              </View>
-            )}
+                  <Text
+                    style={{
+                      color: "#FFF",
+                      fontWeight: "700",
+                      fontSize: 15,
+                      minWidth: isWide ? undefined : 75,
+                      marginTop: isWide ? 0 : 4,
+                    }}
+                  >
+                    {sec.label}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 8,
+                      flex: isWide ? undefined : 1,
+                    }}
+                  >
+                    {sec.items.map((item, itemIdx) => (
+                      <View
+                        key={`${sec.key}-${itemIdx}`}
+                        style={{
+                          backgroundColor: "#1A1A24",
+                          paddingVertical: 6,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: "rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "#B3B3C2",
+                            fontWeight: "600",
+                            fontSize: 14,
+                          }}
+                        >
+                          {item}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+                {isWide && idx < metadataSections.length - 1 && (
+                  <Text
+                    style={{
+                      color: "rgba(255,255,255,0.25)",
+                      fontSize: 16,
+                      marginHorizontal: 6,
+                    }}
+                  >
+                    |
+                  </Text>
+                )}
+              </React.Fragment>
+            ))}
           </View>
+        )}
 
-          {/* Taxonomy Section matching image layout */}
-          <View style={{ gap: 12 }}>
-            {/* Row 1: Genre | Author */}
-            {(displayMeta.genres.length > 0 ||
-              displayMeta.authors.length > 0) && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ alignItems: "center", gap: 8 }}
-              >
-                {displayMeta.genres.length > 0 && (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginRight: 2,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Genre
-                    </Text>
-                    {displayMeta.genres.map((g) => (
-                      <View
-                        key={`g-${g.slug}`}
-                        style={{
-                          paddingVertical: 5,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: colors.text,
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {g.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {displayMeta.genres.length > 0 &&
-                  displayMeta.authors.length > 0 && (
-                    <View
-                      style={{
-                        width: 1,
-                        height: 16,
-                        backgroundColor: colors.border,
-                        marginHorizontal: 4,
-                      }}
-                    />
-                  )}
-                {displayMeta.authors.length > 0 && (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginRight: 2,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Author
-                    </Text>
-                    {displayMeta.authors.map((a) => (
-                      <View
-                        key={`a-${a.slug}`}
-                        style={{
-                          paddingVertical: 5,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: colors.text,
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {a.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </ScrollView>
-            )}
+        {/* Spacer between metadata and chapter list */}
+        <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 22 }} />
 
-            {/* Row 2: Artist | Format | Type */}
-            {(displayMeta.artists.length > 0 ||
-              displayMeta.formats.length > 0 ||
-              displayMeta.types.length > 0) && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ alignItems: "center", gap: 8 }}
-              >
-                {displayMeta.artists.length > 0 && (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginRight: 2,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Artist
-                    </Text>
-                    {displayMeta.artists.map((a) => (
-                      <View
-                        key={`ar-${a.slug}`}
-                        style={{
-                          paddingVertical: 5,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: colors.text,
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {a.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {displayMeta.artists.length > 0 &&
-                  (displayMeta.formats.length > 0 ||
-                    displayMeta.types.length > 0) && (
-                    <View
-                      style={{
-                        width: 1,
-                        height: 16,
-                        backgroundColor: colors.border,
-                        marginHorizontal: 4,
-                      }}
-                    />
-                  )}
-                {displayMeta.formats.length > 0 && (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginRight: 2,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Format
-                    </Text>
-                    {displayMeta.formats.map((f) => (
-                      <View
-                        key={`f-${f.slug}`}
-                        style={{
-                          paddingVertical: 5,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: colors.text,
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {f.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {displayMeta.formats.length > 0 &&
-                  displayMeta.types.length > 0 && (
-                    <View
-                      style={{
-                        width: 1,
-                        height: 16,
-                        backgroundColor: colors.border,
-                        marginHorizontal: 4,
-                      }}
-                    />
-                  )}
-                {displayMeta.types.length > 0 && (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.text,
-                        fontWeight: "900",
-                        fontSize: 13,
-                        marginRight: 2,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Type
-                    </Text>
-                    {displayMeta.types.map((t) => (
-                      <View
-                        key={`t-${t.slug}`}
-                        style={{
-                          paddingVertical: 5,
-                          paddingHorizontal: 10,
-                          borderRadius: 8,
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: colors.text,
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          {t.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      )}
-
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {/* Tombol Baca */}
-        <Pressable
-          onPress={() => {
-            const targetId =
-              resume?.chapterId ?? state.manga?.latest_chapter_id;
-            if (targetId) {
-              router.push(`/reader/${targetId}`);
-            }
-          }}
+        {/* ── Chapter List Header Row (Chapter, Awal, Jump, Sort) ── */}
+        <View
           style={{
-            flex: 1,
-            backgroundColor: colors.button,
-            paddingVertical: 12,
-            paddingHorizontal: 14,
-            borderRadius: 14,
-            justifyContent: "center",
+            flexDirection: "row",
             alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 20,
           }}
         >
+          <Text style={{ fontSize: 18, fontWeight: "900", color: colors.text }}>
+            Chapter
+          </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <IconSymbol name="book.fill" size={18} color={colors.buttonText} />
-            <Text style={{ color: colors.buttonText, fontWeight: "900" }}>
-              {resume ? `Lanjut Ch. ${resume.chapterNumber}` : "Baca Terbaru"}
-            </Text>
-          </View>
-        </Pressable>
+            <Pressable
+              onPress={() => {
+                const target = firstChapter ?? (state.chapters.length > 0 ? state.chapters[state.chapters.length - 1] : null);
+                if (!target) return;
 
-        {/* Tombol Bookmark */}
-        <Pressable
-          onPress={async () => {
-            if (!id) return;
-            const cover = displayCover;
-            const next = await toggleBookmark({
-              mangaId: id,
-              title: displayTitle,
-              coverUrl: cover,
-            });
-            setBookmarked(next);
-            setToast(
-              next ? "Ditambahkan ke bookmark" : "Dihapus dari bookmark",
-            );
-          }}
-          style={{
-            flex: 1,
-            backgroundColor: bookmarked ? colors.ghost : colors.chip,
-            paddingVertical: 12,
-            paddingHorizontal: 14,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: bookmarked ? colors.border : colors.border,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <IconSymbol
-              name={bookmarked ? "bookmark.fill" : "bookmark"}
-              size={18}
-              color={bookmarked ? colors.ghostText : colors.text}
-            />
-            <Text
+                router.push({
+                  pathname: "/reader/[chapterId]",
+                  params: {
+                    chapterId: target.chapter_id,
+                    mangaTitle: displayTitle,
+                    coverUrl: displayCover,
+                  },
+                });
+              }}
               style={{
-                color: bookmarked ? colors.ghostText : colors.text,
-                fontWeight: "900",
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 999,
+                backgroundColor: colors.chip,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              {bookmarked ? "Bookmarked" : "Bookmark"}
-            </Text>
+              <IconSymbol name="book.fill" size={14} color={colors.subtext} />
+              <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>Awal</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                listRef.current?.scrollToIndex({
+                  index: jumpIndex,
+                  animated: true,
+                });
+              }}
+              style={{
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 999,
+                backgroundColor: colors.chip,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <IconSymbol
+                name="arrow.up.to.line"
+                size={14}
+                color={colors.subtext}
+              />
+              <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
+                Jump
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setSortDir((v) => (v === "desc" ? "asc" : "desc"));
+              }}
+              style={{
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 999,
+                backgroundColor: colors.chip,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <IconSymbol
+                name="arrow.up.arrow.down"
+                size={14}
+                color={colors.subtext}
+              />
+              <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
+                {sortDir === "desc" ? "Latest" : "Oldest"}
+              </Text>
+            </Pressable>
           </View>
-        </Pressable>
-      </View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 4,
-        }}
-      >
-        <Text style={{ fontSize: 16, fontWeight: "900", color: colors.text }}>
-          Chapter
-        </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Pressable
-            onPress={() => {
-              const target = firstChapter ?? (state.chapters.length > 0 ? state.chapters[state.chapters.length - 1] : null);
-              if (!target) return;
-
-              router.push({
-                pathname: "/reader/[chapterId]",
-                params: {
-                  chapterId: target.chapter_id,
-                  mangaTitle: displayTitle,
-                  coverUrl: displayCover,
-                },
-              });
-            }}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 999,
-              backgroundColor: colors.chip,
-              borderWidth: 1,
-              borderColor: colors.border,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <IconSymbol name="book.fill" size={14} color={colors.subtext} />
-            <Text style={{ color: colors.subtext, fontWeight: "800" }}>Awal</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              listRef.current?.scrollToIndex({
-                index: jumpIndex,
-                animated: true,
-              });
-            }}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 999,
-              backgroundColor: colors.chip,
-              borderWidth: 1,
-              borderColor: colors.border,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <IconSymbol
-              name="arrow.up.to.line"
-              size={14}
-              color={colors.subtext}
-            />
-            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-              Jump
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setSortDir((v) => (v === "desc" ? "asc" : "desc"));
-              // list akan ter-refresh otomatis via useEffect sortDir
-            }}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 999,
-              backgroundColor: colors.chip,
-              borderWidth: 1,
-              borderColor: colors.border,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <IconSymbol
-              name="arrow.up.arrow.down"
-              size={14}
-              color={colors.subtext}
-            />
-            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-              {sortDir === "desc" ? "Latest" : "Oldest"}
-            </Text>
-          </Pressable>
         </View>
-      </View>
 
-      {/* 🔹 CHAPTER SEARCH */}
-      <View
-        style={{
-          backgroundColor: colors.inputBg,
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderRadius: 14,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-          marginTop: 12,
-        }}
-      >
-        <IconSymbol
-          name="magnifyingglass"
-          size={16}
-          color={colors.placeholder}
-        />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Cari chapter (contoh: 15, ep 20)"
-          placeholderTextColor={colors.placeholder}
+        {/* 🔹 CHAPTER SEARCH */}
+        <View
           style={{
-            flex: 1,
-            color: colors.inputText,
-            fontWeight: "700",
+            backgroundColor: colors.inputBg,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 14,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            marginTop: 14,
           }}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        {searchQuery.length > 0 ? (
-          <Pressable onPress={() => setSearchQuery("")}>
-            <IconSymbol
-              name="xmark.circle.fill"
-              size={18}
-              color={colors.placeholder}
-            />
-          </Pressable>
-        ) : null}
+        >
+          <IconSymbol
+            name="magnifyingglass"
+            size={16}
+            color={colors.placeholder}
+          />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Cari chapter (contoh: 15, ep 20)"
+            placeholderTextColor={colors.placeholder}
+            style={{
+              flex: 1,
+              color: colors.inputText,
+              fontWeight: "700",
+              padding: 0,
+            }}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable onPress={() => setSearchQuery("")}>
+              <IconSymbol
+                name="xmark.circle.fill"
+                size={18}
+                color={colors.placeholder}
+              />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -1359,14 +1169,14 @@ export default function MangaDetailScreen() {
         ListHeaderComponent={header}
         contentContainerStyle={{
           paddingBottom: bottomInset,
-          paddingTop: insets.top + 8,
+          paddingTop: 0,
         }}
         onEndReachedThreshold={0.6}
         onEndReached={() => {
           if (!state.loadingMore) void loadMore();
         }}
         ListEmptyComponent={
-          <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
+          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding, paddingVertical: 48, alignItems: "center", gap: 12 }}>
             {offline ? (
               <>
                 <Text style={{ color: colors.subtext }}>
@@ -1397,168 +1207,178 @@ export default function MangaDetailScreen() {
         windowSize={7}
         removeClippedSubviews
         ListFooterComponent={
-          state.loadingMore ? (
-            <View style={{ paddingVertical: 16 }}>
-              <ActivityIndicator />
-            </View>
-          ) : state.chapters.length > 0 && state.page >= state.totalPage ? (
-            <View style={{ paddingVertical: 16, alignItems: "center" }}>
-              <Text style={{ color: colors.subtext }}>
-                Tidak ada chapter lagi.
-              </Text>
-            </View>
-          ) : null
+          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding }}>
+            {state.loadingMore ? (
+              <View style={{ paddingVertical: 24 }}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : state.chapters.length > 0 && state.page >= state.totalPage ? (
+              <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: "500" }}>
+                  Tidak ada chapter lagi.
+                </Text>
+              </View>
+            ) : null}
+          </View>
         }
         renderItem={({ item }) => (
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: "/reader/[chapterId]",
-                params: {
-                  chapterId: item.chapter_id,
-                  mangaTitle: displayTitle,
-                  coverUrl: displayCover,
-                },
-              })
-            }
-            style={({ pressed }) => ({
-              backgroundColor: colors.bg,
-              opacity: pressed ? 0.85 : 1,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-            })}
-          >
-            <View
-              style={{
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 16,
-                padding: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-              }}
+          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding }}>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/reader/[chapterId]",
+                  params: {
+                    chapterId: item.chapter_id,
+                    mangaTitle: displayTitle,
+                    coverUrl: displayCover,
+                  },
+                })
+              }
+              style={({ pressed }) => ({
+                opacity: pressed ? 0.85 : 1,
+                paddingVertical: 6,
+              })}
             >
-              <ExpoImage
-                source={{ uri: item.thumbnail_image_url ?? "" }}
+              <View
                 style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 14,
-                  backgroundColor: colors.chip,
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 16,
+                  padding: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 16,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: isDark ? 0.4 : 0.05,
+                  shadowRadius: 4,
+                  elevation: 2,
                 }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={120}
-              />
-
-              <View style={{ flex: 1, gap: 6 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <Text 
-                    style={{ 
-                      fontWeight: resume && item.chapter_number === resume.chapterNumber ? "700" : "900", 
-                      color: resume && item.chapter_number === resume.chapterNumber ? colors.subtext : colors.text 
-                    }}
-                  >
-                    Chapter {item.chapter_number}
-                    {item.chapter_title ? ` - ${item.chapter_title}` : ""}
-                  </Text>
-                  {resume && item.chapter_number === resume.chapterNumber && (
-                    <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                      <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "800" }}>Terakhir Dibaca</Text>
-                    </View>
-                  )}
-                  {readChapters.includes(item.chapter_id) && (!resume || item.chapter_number !== resume.chapterNumber) && (
-                    <View style={{ backgroundColor: colors.chip, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.border }}>
-                      <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "800" }}>Sudah Dibaca</Text>
-                    </View>
-                  )}
-                </View>
-
-                <View
+              >
+                <ExpoImage
+                  source={{ uri: item.thumbnail_image_url ?? "" }}
                   style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
+                    width: 56,
+                    height: 56,
+                    borderRadius: 14,
+                    backgroundColor: colors.chip,
                   }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <IconSymbol name="eye" size={14} color={colors.subtext} />
-                    <Text style={{ color: colors.subtext }}>
-                      {item.view_count.toLocaleString("id-ID")}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={120}
+                />
+
+                <View style={{ flex: 1, gap: 6 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <Text 
+                       style={{ 
+                         fontWeight: resume && item.chapter_number === resume.chapterNumber ? "700" : "900", 
+                         color: resume && item.chapter_number === resume.chapterNumber ? colors.subtext : colors.text 
+                       }}
+                    >
+                      Chapter {item.chapter_number}
+                      {item.chapter_title ? ` - ${item.chapter_title}` : ""}
                     </Text>
+                    {resume && item.chapter_number === resume.chapterNumber && (
+                      <View style={{ backgroundColor: colors.primary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "800" }}>Terakhir Dibaca</Text>
+                      </View>
+                    )}
+                    {readChapters.includes(item.chapter_id) && (!resume || item.chapter_number !== resume.chapterNumber) && (
+                      <View style={{ backgroundColor: colors.chip, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ color: colors.subtext, fontSize: 10, fontWeight: "800" }}>Sudah Dibaca</Text>
+                      </View>
+                    )}
                   </View>
+
                   <View
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
-                      gap: 6,
+                      gap: 12,
                     }}
                   >
-                    <IconSymbol
-                      name="calendar"
-                      size={14}
-                      color={colors.subtext}
-                    />
-                    <Text style={{ color: colors.subtext }}>
-                      {new Date(item.release_date).toLocaleDateString("id-ID")}
-                    </Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <IconSymbol name="eye" size={14} color={colors.subtext} />
+                      <Text style={{ color: colors.subtext }}>
+                        {item.view_count.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <IconSymbol
+                        name="calendar"
+                        size={14}
+                        color={colors.subtext}
+                      />
+                      <Text style={{ color: colors.subtext }}>
+                        {new Date(item.release_date).toLocaleDateString("id-ID")}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <IconSymbol
-                name="chevron.right"
-                size={18}
-                color={colors.subtext}
-              />
-            </View>
-          </Pressable>
+                <IconSymbol
+                  name="chevron.right"
+                  size={18}
+                  color={colors.subtext}
+                />
+              </View>
+            </Pressable>
+          </View>
         )}
       />
-      {resumeCta && (
+
+      {/* ── Dynamic Bottom Overlay (Centering toast and resume banners) ── */}
+      {(resumeCta || toast) && (
         <View style={{ 
           position: "absolute", 
-          left: 12, 
-          right: 12, 
-          bottom: insets.bottom > 0 ? insets.bottom + 4 : 12 
+          left: 0, 
+          right: 0, 
+          bottom: insets.bottom > 0 ? insets.bottom + 12 : 16, 
+          alignItems: "center", 
+          paddingHorizontal: contentPadding,
+          zIndex: 99
         }}>
-          {resumeCta}
-        </View>
-      )}
-      {toast && (
-        <View
-          style={{
-            position: "absolute",
-            left: 12,
-            right: 12,
-            bottom: resume ? 76 : 12,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.ghost,
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 12,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <IconSymbol name="bookmark.fill" size={16} color={colors.subtext} />
-            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-              {toast}
-            </Text>
+          <View style={{ width: "100%", maxWidth: 600, gap: 12 }}>
+            {resumeCta}
+            {toast && (
+              <View
+                style={{
+                  backgroundColor: colors.ghost,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 12,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 12,
+                  elevation: 6,
+                }}
+              >
+                <IconSymbol name="bookmark.fill" size={16} color={colors.subtext} />
+                <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                  {toast}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       )}

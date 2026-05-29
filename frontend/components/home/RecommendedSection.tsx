@@ -8,9 +8,10 @@ type Props = {
   items: ShngmManga[];
   isDark: boolean;
   title: string;
+  contentPadding?: number;
 };
 
-export default function RecommendedSection({ items, isDark, title }: Props) {
+export default function RecommendedSection({ items, isDark, title, contentPadding }: Props) {
   const router = useRouter();
   const toMangaParams = React.useCallback((item: ShngmManga) => ({
     mangaId: item.manga_id,
@@ -25,24 +26,27 @@ export default function RecommendedSection({ items, isDark, title }: Props) {
 
   return (
     <View style={{ paddingVertical: 12 }}>
-      <Text
-        style={{
-          fontSize: 18,
-          fontWeight: "900",
-          marginLeft: 12,
-          marginBottom: 8,
-          color: isDark ? "#F2F2F7" : "#1E2329",
-        }}
-      >
-        {title}
-      </Text>
+      {title ? (
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "900",
+            marginLeft: contentPadding ?? 12,
+            marginBottom: 8,
+            color: isDark ? "#F2F2F7" : "#1E2329",
+          }}
+        >
+          {title}
+        </Text>
+      ) : null}
 
       <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
         data={items}
         keyExtractor={(i) => i.manga_id}
-        contentContainerStyle={{ paddingHorizontal: 12, gap: 12 }}
+        contentContainerStyle={{ paddingLeft: contentPadding ?? 12, paddingRight: contentPadding ?? 24, gap: 12 }}
+        ListFooterComponent={<View style={{ width: contentPadding ?? 12 }} />}
         renderItem={({ item }) => (
           <Pressable
             onPress={() =>
@@ -55,8 +59,8 @@ export default function RecommendedSection({ items, isDark, title }: Props) {
             <Image
               source={{ uri: item.cover_portrait_url || item.cover_image_url }}
               style={{
-                width: 96,
-                height: 128,
+                width: 150,
+                height: 200,
                 borderRadius: 14,
                 backgroundColor: "#000",
               }}
@@ -64,7 +68,7 @@ export default function RecommendedSection({ items, isDark, title }: Props) {
             <Text
               numberOfLines={2}
               style={{
-                width: 96,
+                width: 150,
                 marginTop: 4,
                 fontSize: 12,
                 fontWeight: "700",

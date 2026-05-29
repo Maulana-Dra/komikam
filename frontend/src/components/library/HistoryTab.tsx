@@ -11,7 +11,6 @@ import {
   View,
   Platform,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
@@ -21,8 +20,8 @@ import {
   clearHistory,
   getAllHistory,
   replaceHistory,
-  type ReadingProgress,
 } from "@/src/store/history";
+import { getToken } from "@/src/store/authToken";
 
 type HistoryRow = {
   mangaId: string;
@@ -52,7 +51,6 @@ export function HistoryTab() {
   const router = useRouter();
   const { resolved } = useAppTheme();
   const isDark = resolved === "dark";
-  const insets = useSafeAreaInsets();
 
   const colors = React.useMemo(
     () => ({
@@ -76,6 +74,7 @@ export function HistoryTab() {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [rows, setRows] = React.useState<HistoryRow[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(true);
 
   const buildRows = React.useCallback(async (): Promise<HistoryRow[]> => {
     const history = await getAllHistory();
@@ -107,6 +106,13 @@ export function HistoryTab() {
     try {
       setLoading(true);
       setError(null);
+      const token = await getToken();
+      if (!token) {
+        setIsLoggedIn(false);
+        setRows([]);
+        return;
+      }
+      setIsLoggedIn(true);
       const data = await buildRows();
       setRows(data);
     } catch (e) {
@@ -131,7 +137,7 @@ export function HistoryTab() {
     };
 
     if (Platform.OS === "web") {
-      if (window.confirm("Hapus history?\nSemua riwayat bacaan akan dihapus.")) {
+      if (globalThis.confirm("Hapus history?\nSemua riwayat bacaan akan dihapus.")) {
         doClear();
       }
     } else {
@@ -156,7 +162,7 @@ export function HistoryTab() {
       };
 
       if (Platform.OS === "web") {
-        if (window.confirm(`Hapus item ini?\nHapus history untuk "${item.title}"?`)) {
+        if (globalThis.confirm(`Hapus item ini?\nHapus history untuk "${item.title}"?`)) {
           doRemove();
         }
       } else {
@@ -185,6 +191,63 @@ export function HistoryTab() {
       >
         <ActivityIndicator />
         <Text style={{ marginTop: 8, color: colors.subtext }}>Memuat...</Text>
+      </View>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.bg,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: 60,
+          paddingHorizontal: 32,
+          gap: 16,
+        }}
+      >
+        <Ionicons
+          name="lock-closed-outline"
+          size={64}
+          color={colors.subtext}
+          style={{ opacity: 0.4 }}
+        />
+        <Text
+          style={{
+            color: colors.text,
+            fontWeight: "900",
+            fontSize: 18,
+            textAlign: "center",
+          }}
+        >
+          Login Terlebih Dahulu
+        </Text>
+        <Text
+          style={{
+            color: colors.subtext,
+            fontSize: 14,
+            textAlign: "center",
+            lineHeight: 20,
+          }}
+        >
+          Silakan login terlebih dahulu untuk melihat riwayat komik yang sedang kamu baca.
+        </Text>
+        <Pressable
+          onPress={() => router.push("/account")}
+          style={{
+            backgroundColor: colors.primary,
+            borderRadius: 12,
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            marginTop: 8,
+          }}
+        >
+          <Text style={{ color: colors.primaryText, fontWeight: "900" }}>
+            Ke Halaman Akun
+          </Text>
+        </Pressable>
       </View>
     );
   }

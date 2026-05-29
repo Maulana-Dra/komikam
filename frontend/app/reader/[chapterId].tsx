@@ -25,6 +25,7 @@ import {
   upsertProgress,
   markChapterAsReadLocal,
 } from "../../src/store/history";
+import { getToken } from "../../src/store/authToken";
 import {
   getReaderSettings,
   ReaderSettings,
@@ -309,6 +310,8 @@ export default function ReaderScreen() {
 
     let alive = true;
     void (async () => {
+      const token = await getToken();
+      if (!token) return;
       const latest = await getLatestProgressByManga(mangaId);
       if (!alive) return;
       if (!latest || latest.chapterId !== id) return;
@@ -398,7 +401,6 @@ export default function ReaderScreen() {
   );
 
   const totalPages = pages.length;
-  const pageLabel = totalPages > 0 ? `Halaman ${currentIndex + 1} / ${totalPages}` : "0 / 0";
 
   if (loading) {
     return (
@@ -444,6 +446,11 @@ export default function ReaderScreen() {
     borderColor: "rgba(255,255,255,0.1)" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
   };
 
   return (
@@ -599,30 +606,6 @@ export default function ReaderScreen() {
             </View>
           )}
 
-          {/* ── Floating scroll up/down (right) ─────────────── */}
-          <View
-            style={{
-              position: "absolute",
-              right: 12,
-              bottom: insets.bottom + 90,
-              gap: 8,
-              zIndex: 8,
-            }}
-          >
-            <Pressable
-              onPress={() => scrollToIndex(Math.max(0, currentIndex - 1))}
-              style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
-            >
-              <Ionicons name="chevron-up" size={ICON_SIZE} color={ICON_COLOR} />
-            </Pressable>
-            <Pressable
-              onPress={() => scrollToIndex(Math.min(totalPages - 1, currentIndex + 1))}
-              style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
-            >
-              <Ionicons name="chevron-down" size={ICON_SIZE} color={ICON_COLOR} />
-            </Pressable>
-          </View>
-
           {/* ── Floating bottom toolbar (4 box buttons) ──────── */}
           <View
             style={{
@@ -634,13 +617,6 @@ export default function ReaderScreen() {
               zIndex: 8,
             }}
           >
-            {/* Page label */}
-            <Text style={{ color: "rgba(242,242,247,0.55)", fontSize: 11, marginBottom: 10, fontWeight: "700" }}>
-              {pageLabel}
-            </Text>
-
-
-
             {/* 4 box buttons row */}
             <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
               {/* Prev chapter */}
@@ -704,6 +680,30 @@ export default function ReaderScreen() {
           </View>
         </>
       )}
+
+      {/* ── Floating scroll up/down (right) ─────────────── */}
+      <View
+        style={{
+          position: "absolute",
+          right: isDesktop ? 24 : 12,
+          bottom: insets.bottom + 90,
+          gap: 8,
+          zIndex: 8,
+        }}
+      >
+        <Pressable
+          onPress={() => scrollToIndex(Math.max(0, currentIndex - 1))}
+          style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
+        >
+          <Ionicons name="chevron-up" size={ICON_SIZE} color={ICON_COLOR} />
+        </Pressable>
+        <Pressable
+          onPress={() => scrollToIndex(Math.min(totalPages - 1, currentIndex + 1))}
+          style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
+        >
+          <Ionicons name="chevron-down" size={ICON_SIZE} color={ICON_COLOR} />
+        </Pressable>
+      </View>
 
       {/* ── Chapter List Panel (bottom sheet) ───────────────── */}
       {chapterListVisible && (

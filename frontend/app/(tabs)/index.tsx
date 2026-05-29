@@ -8,6 +8,7 @@ import {
   Image,
   Pressable,
   RefreshControl,
+  ScrollView,
   TextInput,
   useWindowDimensions,
   View
@@ -26,6 +27,7 @@ import {
 } from "@/src/api/shngmClient";
 import type { ShngmManga } from "@/src/api/shngmTypes";
 import { getAllHistory, type ReadingProgress } from "@/src/store/history";
+import { getToken } from "@/src/store/authToken";
 
 import { MangaGridSkeleton, MangaListSkeleton } from "@/components/ui/SkeletonLoaders";
 import HeroCarousel from "@/components/home/HeroCarousel";
@@ -117,6 +119,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+  const contentPadding = isDesktop ? 24 : 12;
   const toMangaParams = React.useCallback(
     (item: ShngmManga) => ({
       mangaId: item.manga_id,
@@ -189,6 +192,7 @@ export default function HomeScreen() {
   });
   const [recent, setRecent] = React.useState<ReadingProgress[]>([]);
   const [recentLoading, setRecentLoading] = React.useState<boolean>(true);
+  const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(false);
 
   const [searchState, setSearchState] = React.useState<{
     items: ShngmManga[];
@@ -481,7 +485,17 @@ export default function HomeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      void loadRecent();
+      void (async () => {
+        const token = await getToken();
+        const logged = !!token;
+        setIsLoggedIn(logged);
+        if (logged) {
+          void loadRecent();
+        } else {
+          setRecent([]);
+          setRecentLoading(false);
+        }
+      })();
     }, [loadRecent]),
   );
 
@@ -596,265 +610,220 @@ export default function HomeScreen() {
     setIsGrid(toGrid);
   };
 
-  const Segmented = (
-    <View
-      style={{
-        flexDirection: "row",
-        gap: 8,
-        paddingHorizontal: 12,
-        paddingBottom: 10,
-        backgroundColor: colors.bg,
-      }}
-    >
-      {offline ? (
-        <Animated.View
-          style={{
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 999,
-            backgroundColor: colors.ghost,
-            borderWidth: 1,
-            borderColor: colors.border,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            transform: [
-              {
-                scale: offlinePulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 1.05],
-                }),
-              },
-            ],
-            opacity: offlinePulse.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 0.85],
-            }),
-          }}
-        >
-          <IconSymbol name="wifi.slash" size={14} color={colors.subtext} />
-          <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-            Offline
-          </Text>
-        </Animated.View>
-      ) : null}
-
-      {/* toggle theme */}
-      <Pressable
-        onPress={() => setMode(isDark ? "light" : "dark")}
-        style={{
-          paddingVertical: 8,
-          paddingHorizontal: 12,
-          borderRadius: 999,
-          backgroundColor: colors.chip,
-          borderWidth: 1,
-          borderColor: colors.border,
-        }}
-      >
-        <IconSymbol
-          name={isDark ? "sun.max.fill" : "moon.fill"}
-          size={16}
-          color={colors.subtext}
-        />
-      </Pressable>
-    </View>
-  );
-
   if (activeFeed.loading && activeFeed.items.length === 0) {
     const skeletonCards = Array.from({ length: 6 });
     const skeletonShort = Array.from({ length: 8 });
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <View
-          style={{
-            paddingHorizontal: 12,
-            paddingTop: 12,
-            paddingBottom: 10,
-            gap: 10,
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingBottom: 24,
+            paddingTop: insets.top + 8,
           }}
+          showsVerticalScrollIndicator={false}
         >
-          <View
-            style={{
-              width: 120,
-              height: 24,
-              borderRadius: 8,
-              backgroundColor: colors.shimmerBase,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(120, 8)} />
-          </View>
-          <View
-            style={{
-              height: 44,
-              borderRadius: 14,
-              backgroundColor: colors.shimmerBase,
-              borderWidth: 1,
-              borderColor: colors.border,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(320, 14)} />
-          </View>
-        </View>
-
-        <View
-          style={{
-            flexDirection: "row",
-            gap: 8,
-            paddingHorizontal: 12,
-            paddingBottom: 10,
-          }}
-        >
-          <View
-            style={{
-              width: 90,
-              height: 32,
-              borderRadius: 999,
-              backgroundColor: colors.shimmerBase,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(90, 999)} />
-          </View>
-          <View
-            style={{
-              width: 90,
-              height: 32,
-              borderRadius: 999,
-              backgroundColor: colors.shimmerBase,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(90, 999)} />
-          </View>
-        </View>
-
-        <View style={{ paddingHorizontal: 12, marginBottom: 14 }}>
-          <View
-            style={{
-              width: 80,
-              height: 16,
-              borderRadius: 6,
-              backgroundColor: colors.shimmerBase,
-              marginBottom: 10,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(80, 6)} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            {skeletonShort.slice(0, 3).map((_, idx) => (
-              <View
-                key={`hero-skeleton-${idx}`}
-                style={{
-                  width: 280,
-                  height: 160,
-                  borderRadius: 18,
-                  backgroundColor: colors.shimmerBase,
-                  overflow: "hidden",
-                }}
-              >
-                <Animated.View style={shimmerOverlayStyle(280, 18)} />
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={{ paddingHorizontal: 12 }}>
-          <View
-            style={{
-              width: 120,
-              height: 16,
-              borderRadius: 6,
-              backgroundColor: colors.shimmerBase,
-              marginBottom: 10,
-              overflow: "hidden",
-            }}
-          >
-            <Animated.View style={shimmerOverlayStyle(120, 6)} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
-            {skeletonShort.slice(0, 6).map((_, idx) => (
-              <View
-                key={`rec-skeleton-${idx}`}
-                style={{
-                  width: 96,
-                  height: 128,
-                  borderRadius: 14,
-                  backgroundColor: colors.shimmerBase,
-                  overflow: "hidden",
-                }}
-              >
-                <Animated.View style={shimmerOverlayStyle(96, 14)} />
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={{ paddingHorizontal: 12, marginTop: 8 }}>
-          {skeletonCards.map((_, idx) => (
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
             <View
-              key={`list-skeleton-${idx}`}
               style={{
-                backgroundColor: colors.card,
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 16,
-                padding: 12,
-                flexDirection: "row",
-                gap: 12,
-                marginBottom: 12,
+                paddingTop: 12,
+                paddingBottom: 10,
+                gap: 10,
               }}
             >
               <View
                 style={{
-                  width: 72,
-                  height: 96,
-                  borderRadius: 14,
+                  width: 120,
+                  height: 24,
+                  borderRadius: 8,
                   backgroundColor: colors.shimmerBase,
                   overflow: "hidden",
                 }}
               >
-                <Animated.View style={shimmerOverlayStyle(72, 14)} />
+                <Animated.View style={shimmerOverlayStyle(120, 8)} />
               </View>
-              <View style={{ flex: 1, gap: 8 }}>
-                <View
-                  style={{
-                    height: 16,
-                    borderRadius: 6,
-                    backgroundColor: colors.shimmerBase,
-                    overflow: "hidden",
-                  }}
-                >
-                  <Animated.View style={shimmerOverlayStyle(220, 6)} />
-                </View>
-                <View
-                  style={{
-                    height: 12,
-                    borderRadius: 6,
-                    backgroundColor: colors.shimmerBase,
-                    width: 180,
-                    overflow: "hidden",
-                  }}
-                >
-                  <Animated.View style={shimmerOverlayStyle(180, 6)} />
-                </View>
-                <View
-                  style={{
-                    height: 12,
-                    borderRadius: 6,
-                    backgroundColor: colors.shimmerBase,
-                    width: 140,
-                    overflow: "hidden",
-                  }}
-                >
-                  <Animated.View style={shimmerOverlayStyle(140, 6)} />
-                </View>
+              <View
+                style={{
+                  height: 44,
+                  borderRadius: 14,
+                  backgroundColor: colors.shimmerBase,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  overflow: "hidden",
+                }}
+              >
+                <Animated.View style={shimmerOverlayStyle(320, 14)} />
               </View>
             </View>
-          ))}
-        </View>
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                paddingBottom: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 90,
+                  height: 32,
+                  borderRadius: 999,
+                  backgroundColor: colors.shimmerBase,
+                  overflow: "hidden",
+                }}
+              >
+                <Animated.View style={shimmerOverlayStyle(90, 999)} />
+              </View>
+              <View
+                style={{
+                  width: 90,
+                  height: 32,
+                  borderRadius: 999,
+                  backgroundColor: colors.shimmerBase,
+                  overflow: "hidden",
+                }}
+              >
+                <Animated.View style={shimmerOverlayStyle(90, 999)} />
+              </View>
+            </View>
+          </View>
+
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", marginBottom: 14 }}>
+            <View
+              style={{
+                width: 80,
+                height: 16,
+                borderRadius: 6,
+                backgroundColor: colors.shimmerBase,
+                marginBottom: 10,
+                marginLeft: contentPadding,
+                overflow: "hidden",
+              }}
+            >
+              <Animated.View style={shimmerOverlayStyle(80, 6)} />
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 12, paddingHorizontal: contentPadding }}
+            >
+              {skeletonShort.slice(0, 3).map((_, idx) => (
+                <View
+                  key={`hero-skeleton-${idx}`}
+                  style={{
+                    width: 280,
+                    height: 240,
+                    borderRadius: 18,
+                    backgroundColor: colors.shimmerBase,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Animated.View style={shimmerOverlayStyle(280, 18)} />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center" }}>
+            <View
+              style={{
+                width: 120,
+                height: 16,
+                borderRadius: 6,
+                backgroundColor: colors.shimmerBase,
+                marginBottom: 10,
+                marginLeft: contentPadding,
+                overflow: "hidden",
+              }}
+            >
+              <Animated.View style={shimmerOverlayStyle(120, 6)} />
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 12, paddingHorizontal: contentPadding, marginBottom: 8 }}
+            >
+              {skeletonShort.slice(0, 6).map((_, idx) => (
+                <View
+                  key={`rec-skeleton-${idx}`}
+                  style={{
+                    width: 150,
+                    height: 200,
+                    borderRadius: 14,
+                    backgroundColor: colors.shimmerBase,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Animated.View style={shimmerOverlayStyle(150, 14)} />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding, marginTop: 8 }}>
+            {skeletonCards.map((_, idx) => (
+              <View
+                key={`list-skeleton-${idx}`}
+                style={{
+                  backgroundColor: colors.card,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 16,
+                  padding: 12,
+                  flexDirection: "row",
+                  gap: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 72,
+                    height: 96,
+                    borderRadius: 14,
+                    backgroundColor: colors.shimmerBase,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Animated.View style={shimmerOverlayStyle(72, 14)} />
+                </View>
+                <View style={{ flex: 1, gap: 8 }}>
+                  <View
+                    style={{
+                      height: 16,
+                      borderRadius: 6,
+                      backgroundColor: colors.shimmerBase,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(220, 6)} />
+                  </View>
+                  <View
+                    style={{
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: colors.shimmerBase,
+                      width: 180,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(180, 6)} />
+                  </View>
+                  <View
+                    style={{
+                      height: 12,
+                      borderRadius: 6,
+                      backgroundColor: colors.shimmerBase,
+                      width: 140,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <Animated.View style={shimmerOverlayStyle(140, 6)} />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -921,143 +890,207 @@ export default function HomeScreen() {
 
   const Header = (
     <View style={{ backgroundColor: colors.bg }}>
-      {/* Top bar + Search */}
-      <View
-        style={{
-          paddingHorizontal: 12,
-          paddingTop: 12,
-          paddingBottom: 10,
-          gap: 10,
-        }}
-      >
-        <Text style={{ fontSize: 24, fontWeight: "900", color: colors.text }}>
-          Komikam
-        </Text>
-
+      {/* 1. Centered search and top bar */}
+      <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
+        {/* Top bar + Search */}
         <View
           style={{
-            backgroundColor: colors.inputBg,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 14,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            flexDirection: "row",
-            alignItems: "center",
+            paddingTop: 12,
+            paddingBottom: 10,
             gap: 10,
           }}
         >
-          <IconSymbol
-            name="magnifyingglass"
-            size={16}
-            color={colors.placeholder}
-          />
-          <TextInput
-            value={queryInput}
-            onChangeText={setQueryInput}
-            placeholder="Cari judul"
-            placeholderTextColor={colors.placeholder}
-            style={{
-              flex: 1,
-              color: colors.inputText,
-              fontWeight: "700",
-              fontFamily: Poppins.bold,
-            }}
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
-          {queryInput.length > 0 ? (
-            <Pressable onPress={() => setQueryInput("")}>
-              <IconSymbol
-                name="xmark.circle.fill"
-                size={18}
-                color={colors.placeholder}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
+          <Text style={{ fontSize: 24, fontWeight: "900", color: colors.text }}>
+            Komikam
+          </Text>
 
-      {Segmented}
-
-      {banner ? (
-        <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
           <View
             style={{
-              backgroundColor: colors.ghost,
+              backgroundColor: colors.inputBg,
               borderWidth: 1,
               borderColor: colors.border,
-              borderRadius: 12,
-              padding: 10,
+              borderRadius: 14,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
               flexDirection: "row",
               alignItems: "center",
               gap: 10,
             }}
           >
-            <Text style={{ flex: 1, color: colors.subtext }} numberOfLines={2}>
-              {banner}
-            </Text>
-            <Pressable
-              onPress={() => {
-                setBanner(null);
-                if (useServerSearch && isSearching) {
-                  setSearchNonce((n) => n + 1);
-                } else {
-                  void refreshActive();
-                }
+            <IconSymbol
+              name="magnifyingglass"
+              size={16}
+              color={colors.placeholder}
+            />
+            <TextInput
+              value={queryInput}
+              onChangeText={setQueryInput}
+              placeholder="Cari judul"
+              placeholderTextColor={colors.placeholder}
+              style={{
+                flex: 1,
+                color: colors.inputText,
+                fontWeight: "700",
+                fontFamily: Poppins.bold,
               }}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {queryInput.length > 0 ? (
+              <Pressable onPress={() => setQueryInput("")}>
+                <IconSymbol
+                  name="xmark.circle.fill"
+                  size={18}
+                  color={colors.placeholder}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Segmented controls (theme toggles / offline badge) */}
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 8,
+            paddingBottom: 10,
+            backgroundColor: colors.bg,
+          }}
+        >
+          {offline ? (
+            <Animated.View
               style={{
                 paddingVertical: 6,
                 paddingHorizontal: 10,
                 borderRadius: 999,
-                backgroundColor: colors.activePillBg,
+                backgroundColor: colors.ghost,
+                borderWidth: 1,
+                borderColor: colors.border,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                transform: [
+                  {
+                    scale: offlinePulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.05],
+                    }),
+                  },
+                ],
+                opacity: offlinePulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0.85],
+                }),
               }}
             >
-              <Text style={{ color: colors.activePillText, fontWeight: "800" }}>
-                Retry
+              <IconSymbol name="wifi.slash" size={14} color={colors.subtext} />
+              <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                Offline
               </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setBanner(null)}
+            </Animated.View>
+          ) : null}
+
+          <Pressable
+            onPress={() => setMode(isDark ? "light" : "dark")}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 999,
+              backgroundColor: colors.chip,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <IconSymbol
+              name={isDark ? "sun.max.fill" : "moon.fill"}
+              size={16}
+              color={colors.subtext}
+            />
+          </Pressable>
+        </View>
+
+        {banner ? (
+          <View style={{ paddingBottom: 10 }}>
+            <View
               style={{
-                paddingVertical: 6,
-                paddingHorizontal: 8,
-                borderRadius: 999,
+                backgroundColor: colors.ghost,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 12,
+                padding: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
               }}
             >
-              <IconSymbol
-                name="xmark.circle.fill"
-                size={16}
-                color={colors.subtext}
-              />
-            </Pressable>
+              <Text style={{ flex: 1, color: colors.subtext }} numberOfLines={2}>
+                {banner}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setBanner(null);
+                  if (useServerSearch && isSearching) {
+                    setSearchNonce((n) => n + 1);
+                  } else {
+                    void refreshActive();
+                  }
+                }}
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 10,
+                  borderRadius: 999,
+                  backgroundColor: colors.activePillBg,
+                }}
+              >
+                <Text style={{ color: colors.activePillText, fontWeight: "800" }}>
+                  Retry
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setBanner(null)}
+                style={{
+                  paddingVertical: 6,
+                  paddingHorizontal: 8,
+                  borderRadius: 999,
+                }}
+              >
+                <IconSymbol
+                  name="xmark.circle.fill"
+                  size={16}
+                  color={colors.subtext}
+                />
+              </Pressable>
+            </View>
           </View>
+        ) : null}
+      </View>
+
+      {/* 2. Hero Carousel (centered layout matching others) */}
+      {!isSearching && hero.length > 0 ? (
+        <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
+          <HeroCarousel
+            items={hero}
+            colors={colors}
+            onPressItem={(item) =>
+              router.push({
+                pathname: "/manga/[mangaId]",
+                params: toMangaParams(item),
+              })
+            }
+          />
         </View>
       ) : null}
 
-      {/* Hero */}
-      {!isSearching && hero.length > 0 ? (
-        <HeroCarousel
-          items={hero}
-          colors={colors}
-          onPressItem={(item) =>
-            router.push({
-              pathname: "/manga/[mangaId]",
-              params: toMangaParams(item),
-            })
-          }
-        />
-      ) : null}
-
-      {/* Continue reading */}
-      {!isSearching && (recentLoading || recent.length > 0) ? (
-        <View style={{ paddingHorizontal: 12, marginBottom: 14 }}>
+      {/* 3. Continue reading */}
+      {!isSearching && isLoggedIn && (recentLoading || recent.length > 0) ? (
+        <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", marginBottom: 14 }}>
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
               marginBottom: 10,
+              paddingHorizontal: contentPadding,
             }}
           >
             <Text
@@ -1077,7 +1110,7 @@ export default function HomeScreen() {
           </View>
 
           {recentLoading ? (
-            <View style={{ flexDirection: "row", gap: 12 }}>
+            <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: contentPadding }}>
               {Array.from({ length: 3 }).map((_, idx) => (
                 <View
                   key={`recent-loading-${idx}`}
@@ -1099,7 +1132,8 @@ export default function HomeScreen() {
               horizontal
               showsHorizontalScrollIndicator={false}
               keyExtractor={(it) => `${it.mangaId}:${it.chapterId}`}
-              contentContainerStyle={{ gap: 12 }}
+              contentContainerStyle={{ gap: 12, paddingLeft: contentPadding, paddingRight: contentPadding }}
+              ListFooterComponent={<View style={{ width: contentPadding }} />}
               renderItem={({ item }) => {
                 const title = item.mangaTitle || "Unknown";
                 const page = item.pageIndex + 1;
@@ -1174,7 +1208,7 @@ export default function HomeScreen() {
                             {title}
                           </Text>
                           <Text style={{ color: colors.subtext }}>
-                            Ch {item.chapterNumber} · Hal {page}/{total || "-"}
+                            Ch {item.chapterNumber}
                           </Text>
                         </View>
 
@@ -1206,73 +1240,75 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      {/* Recommended 3 format */}
+      {/* 4. Recommended 3 format */}
       {!isSearching ? (
-        <View style={{ paddingHorizontal: 12 }}>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "900",
-              color: colors.text,
-              marginBottom: 10,
-            }}
-          >
-            Recommended
-          </Text>
-          {/* 🔹 FILTER BUTTON */}
-          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-            {(["manhwa", "manga", "manhua"] as const).map((t) => {
-              const selected = recFilter === t;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => setRecFilter(t)}
-                  style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: 999,
-                    backgroundColor: selected
-                      ? colors.activePillBg
-                      : colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text
+        <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", marginBottom: 14 }}>
+          <View style={{ paddingHorizontal: contentPadding }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "900",
+                color: colors.text,
+                marginBottom: 10,
+              }}
+            >
+              Recommended
+            </Text>
+            {/* 🔹 FILTER BUTTON */}
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+              {(["manhwa", "manga", "manhua"] as const).map((t) => {
+                const selected = recFilter === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setRecFilter(t)}
                     style={{
-                      color: selected ? colors.activePillText : colors.subtext,
-                      fontWeight: "900",
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 999,
+                      backgroundColor: selected
+                        ? colors.activePillBg
+                        : colors.card,
+                      borderWidth: 1,
+                      borderColor: colors.border,
                     }}
                   >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={{
+                        color: selected ? colors.activePillText : colors.subtext,
+                        fontWeight: "900",
+                      }}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
           {/* 🔹 CONTENT */}
           {rec.loading ? (
             <View
-              style={{ paddingVertical: 10, flexDirection: "row", gap: 12 }}
+              style={{ paddingVertical: 10, flexDirection: "row", gap: 12, paddingHorizontal: contentPadding }}
             >
               {Array.from({ length: 6 }).map((_, idx) => (
                 <View
                   key={`rec-loading-${idx}`}
                   style={{
-                    width: 96,
-                    height: 128,
+                    width: 150,
+                    height: 200,
                     borderRadius: 14,
                     backgroundColor: colors.shimmerBase,
                     overflow: "hidden",
                   }}
                 >
-                  <Animated.View style={shimmerOverlayStyle(96, 14)} />
+                  <Animated.View style={shimmerOverlayStyle(150, 14)} />
                 </View>
               ))}
             </View>
           ) : rec.error ? (
-            <View style={{ paddingVertical: 10, gap: 10 }}>
+            <View style={{ paddingVertical: 10, gap: 10, paddingHorizontal: contentPadding }}>
               <Text style={{ color: colors.subtext }}>
                 Gagal load recommended: {rec.error}
               </Text>
@@ -1292,18 +1328,19 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           ) : rec.manhwa.length + rec.manga.length + rec.manhua.length === 0 ? (
-            <View style={{ paddingVertical: 10 }}>
+            <View style={{ paddingVertical: 10, paddingHorizontal: contentPadding }}>
               <Text style={{ color: colors.subtext }}>
                 Belum ada rekomendasi saat ini.
               </Text>
             </View>
           ) : (
-            <>
+            <View>
               {recFilter === "manhwa" && (
                 <RecommendedSection
                   title=""
                   items={rec.manhwa}
                   isDark={isDark}
+                  contentPadding={contentPadding}
                 />
               )}
 
@@ -1312,6 +1349,7 @@ export default function HomeScreen() {
                   title=""
                   items={rec.manga}
                   isDark={isDark}
+                  contentPadding={contentPadding}
                 />
               )}
 
@@ -1320,110 +1358,112 @@ export default function HomeScreen() {
                   title=""
                   items={rec.manhua}
                   isDark={isDark}
+                  contentPadding={contentPadding}
                 />
               )}
-            </>
+            </View>
           )}
         </View>
       ) : null}
 
-      <View style={{ paddingHorizontal: 12, marginTop: 6, marginBottom: 10 }}>
-        {/* Title */}
-        <Text
-          style={{
-            fontSize: 16,
-            fontWeight: "900",
-            color: colors.text,
-            marginBottom: 10,
-          }}
-        >
-          {isSearching
-            ? "Hasil Pencarian"
-            : `Latest Updates (${active === "project" ? "Project" : "Mirror"})`}
-        </Text>
+      {/* 5. Latest updates title and controls */}
+      <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding, marginTop: 6, marginBottom: 10 }}>
+          {/* Title */}
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "900",
+              color: colors.text,
+              marginBottom: 10,
+            }}
+          >
+            {isSearching
+              ? "Hasil Pencarian"
+              : `Latest Updates (${active === "project" ? "Project" : "Mirror"})`}
+          </Text>
 
-        {/* ROW: LEFT (Project/Mirror) + RIGHT (View Toggle) */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {/* 🔹 LEFT: Project / Mirror */}
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {(["project", "mirror"] as const).map((t) => {
-              const selected = active === t;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => setActive(t)}
-                  style={{
-                    paddingVertical: 9,
-                    paddingHorizontal: 12,
-                    borderRadius: 999,
-                    backgroundColor: selected
-                      ? colors.activePillBg
-                      : colors.chip,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? colors.activePillText : colors.subtext,
-                      fontWeight: "900",
-                    }}
-                  >
-                    {t === "project" ? "Project" : "Mirror"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {/* 🔹 RIGHT: Grid / List Toggle */}
+          {/* ROW: LEFT (Project/Mirror) + RIGHT (View Toggle) */}
           <View
             style={{
               flexDirection: "row",
-              backgroundColor: colors.card,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: colors.border,
-              padding: 4,
+              alignItems: "center",
+              justifyContent: "space-between",
             }}
           >
-            {/* Grid */}
-            <Pressable
-              onPress={() => handleToggleLayout(true)}
-              style={{
-                padding: 6,
-                borderRadius: 6,
-                backgroundColor: isGrid ? colors.activePillBg : "transparent",
-              }}
-            >
-              <Ionicons
-                name="grid-outline"
-                size={16}
-                color={isGrid ? colors.activePillText : colors.subtext}
-              />
-            </Pressable>
+            {/* 🔹 LEFT: Project / Mirror */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["project", "mirror"] as const).map((t) => {
+                const selected = active === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setActive(t)}
+                    style={{
+                      paddingVertical: 9,
+                      paddingHorizontal: 12,
+                      borderRadius: 999,
+                      backgroundColor: selected
+                        ? colors.activePillBg
+                        : colors.chip,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: selected ? colors.activePillText : colors.subtext,
+                        fontWeight: "900",
+                      }}
+                    >
+                      {t === "project" ? "Project" : "Mirror"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-            {/* List */}
-            <Pressable
-              onPress={() => handleToggleLayout(false)}
+            {/* 🔹 RIGHT: Grid / List Toggle */}
+            <View
               style={{
-                padding: 6,
-                borderRadius: 6,
-                backgroundColor: !isGrid ? colors.activePillBg : "transparent",
+                flexDirection: "row",
+                backgroundColor: colors.card,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: colors.border,
+                padding: 4,
               }}
             >
-              <Ionicons
-                name="list-outline"
-                size={16}
-                color={!isGrid ? colors.activePillText : colors.subtext}
-              />
-            </Pressable>
+              {/* Grid */}
+              <Pressable
+                onPress={() => handleToggleLayout(true)}
+                style={{
+                  padding: 6,
+                  borderRadius: 6,
+                  backgroundColor: isGrid ? colors.activePillBg : "transparent",
+                }}
+              >
+                <Ionicons
+                  name="grid-outline"
+                  size={16}
+                  color={isGrid ? colors.activePillText : colors.subtext}
+                />
+              </Pressable>
+
+              {/* List */}
+              <Pressable
+                onPress={() => handleToggleLayout(false)}
+                style={{
+                  padding: 6,
+                  borderRadius: 6,
+                  backgroundColor: !isGrid ? colors.activePillBg : "transparent",
+                }}
+              >
+                <Ionicons
+                  name="list-outline"
+                  size={16}
+                  color={!isGrid ? colors.activePillText : colors.subtext}
+                />
+              </Pressable>
           </View>
         </View>
       </View>
@@ -1438,7 +1478,6 @@ export default function HomeScreen() {
         ListHeaderComponent={Header}
         contentContainerStyle={{
           paddingBottom: 24,
-          paddingHorizontal: 12,
           paddingTop: insets.top + 8,
         }}
         refreshControl={
@@ -1453,49 +1492,174 @@ export default function HomeScreen() {
         onEndReached={() => void loadMore()}
         ListFooterComponent={
           activeFeed.loadingMore ? (
-            <View style={{ paddingVertical: 16 }}>
+            <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingVertical: 16 }}>
               <ActivityIndicator />
             </View>
           ) : null
         }
         ListEmptyComponent={
-          <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
-            {useServerSearch && searchState.loading ? (
-              <View style={{ paddingTop: 16 }}>
-                {isGrid ? <MangaGridSkeleton columns={numColumns} /> : <MangaListSkeleton />}
-              </View>
-            ) : offline ? (
-              <>
-                <Text style={{ color: colors.subtext }}>
-                  Offline. Tidak bisa memuat data.
-                </Text>
-                <Pressable
-                  onPress={() => void refreshActive()}
-                  style={{
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: 999,
-                    backgroundColor: colors.ghost,
-                  }}
-                >
-                  <Text style={{ color: colors.ghostText, fontWeight: "800" }}>
-                    Coba lagi
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
+            <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
+              {useServerSearch && searchState.loading ? (
+                <View style={{ paddingTop: 16 }}>
+                  {isGrid ? <MangaGridSkeleton columns={numColumns} /> : <MangaListSkeleton />}
+                </View>
+              ) : offline ? (
+                <>
+                  <Text style={{ color: colors.subtext }}>
+                    Offline. Tidak bisa memuat data.
                   </Text>
-                </Pressable>
-              </>
-            ) : (
-              <Text style={{ color: colors.subtext }}>
-                {debouncedQuery.trim()
-                  ? `Tidak ada hasil untuk "${debouncedQuery.trim()}".`
-                  : "Belum ada update."}
-              </Text>
-            )}
+                  <Pressable
+                    onPress={() => void refreshActive()}
+                    style={{
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 999,
+                      backgroundColor: colors.ghost,
+                    }}
+                  >
+                    <Text style={{ color: colors.ghostText, fontWeight: "800" }}>
+                      Coba lagi
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
+                <Text style={{ color: colors.subtext }}>
+                  {debouncedQuery.trim()
+                    ? `Tidak ada hasil untuk "${debouncedQuery.trim()}".`
+                    : "Belum ada update."}
+                </Text>
+              )}
+            </View>
           </View>
         }
         renderItem={({ item: row }) => (
-          <View style={{ flexDirection: "row", gap: isGrid ? 8 : 0 }}>
-            {row.items.map((item) => {
-              if (!isGrid) {
+          <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
+            <View style={{ flexDirection: "row", gap: isGrid ? 8 : 0 }}>
+              {row.items.map((item) => {
+                if (!isGrid) {
+                  return (
+                    <Pressable
+                      key={item.manga_id}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/manga/[mangaId]",
+                          params: toMangaParams(item),
+                        })
+                      }
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        opacity: pressed ? 0.85 : 1,
+                        marginBottom: 12,
+                      })}
+                    >
+                      <View
+                        style={{
+                          backgroundColor: colors.card,
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                          borderRadius: 16,
+                          padding: 12,
+                          flexDirection: "row",
+                          gap: 12,
+                        }}
+                      >
+                        <View style={{ position: "relative" }}>
+                          <Image
+                            source={{
+                              uri: item.cover_portrait_url || item.cover_image_url,
+                            }}
+                            style={{
+                              width: 72,
+                              height: 96,
+                              borderRadius: 14,
+                              backgroundColor: colors.chip,
+                            }}
+                          />
+                          {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+                            <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#FF3B30', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 1, elevation: 2, zIndex: 10 }}>
+                              <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>NEW</Text>
+                            </View>
+                          )}
+                          {item.latest_chapter_time ? (
+                            <View style={{ position: "absolute", top: 4, left: 4, backgroundColor: colors.danger, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                              <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
+                            </View>
+                          ) : null}
+                          {item.status ? (
+                            <View style={{ position: "absolute", bottom: 4, left: 4, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                              <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
+                            </View>
+                          ) : null}
+                          {item.country_id ? (
+                            <View style={{ position: "absolute", bottom: 4, right: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                              <Text style={{ fontSize: 9 }}>{getFlagEmoji(item.country_id)}</Text>
+                              <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        <View style={{ flex: 1, gap: 6 }}>
+                          <Text
+                            numberOfLines={2}
+                            style={{
+                              fontSize: 16,
+                              fontWeight: "900",
+                              color: colors.text,
+                            }}
+                          >
+                            {item.title}
+                          </Text>
+
+                          <Text numberOfLines={2} style={{ color: colors.subtext }}>
+                            {item.description}
+                          </Text>
+
+                          <View
+                            style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                          >
+                            <View
+                              style={{
+                                backgroundColor: colors.chip,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                paddingVertical: 6,
+                                paddingHorizontal: 10,
+                                borderRadius: 999,
+                              }}
+                            >
+                              <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                                Rate {item.user_rate || 0}
+                              </Text>
+                            </View>
+
+                            <View
+                              style={{
+                                backgroundColor: colors.chip,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                paddingVertical: 6,
+                                paddingHorizontal: 10,
+                                borderRadius: 999,
+                              }}
+                            >
+                              <Text style={{ color: colors.subtext, fontWeight: "800" }}>
+                                Views {item.view_count.toLocaleString("id-ID")}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <IconSymbol
+                          name="chevron.right"
+                          size={18}
+                          color={colors.subtext}
+                        />
+                      </View>
+                    </Pressable>
+                  );
+                }
+
                 return (
                   <Pressable
                     key={item.manga_id}
@@ -1505,225 +1669,104 @@ export default function HomeScreen() {
                         params: toMangaParams(item),
                       })
                     }
-                    style={({ pressed }) => ({
-                      flex: 1,
-                      opacity: pressed ? 0.85 : 1,
-                      marginBottom: 12,
-                    })}
-                  >
-                    <View
-                      style={{
+                    style={({ pressed }) => [
+                      {
+                        flex: 1,
                         backgroundColor: colors.card,
+                        borderRadius: 12,
+                        overflow: "hidden",
                         borderWidth: 1,
                         borderColor: colors.border,
-                        borderRadius: 16,
-                        padding: 12,
-                        flexDirection: "row",
-                        gap: 12,
-                      }}
-                    >
-                      <View style={{ position: "relative" }}>
-                        <Image
-                          source={{
-                            uri: item.cover_portrait_url || item.cover_image_url,
-                          }}
-                          style={{
-                            width: 72,
-                            height: 96,
-                            borderRadius: 14,
-                            backgroundColor: colors.chip,
-                          }}
-                        />
-                        {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
-                          <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#FF3B30', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 1, elevation: 2, zIndex: 10 }}>
-                            <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>NEW</Text>
-                          </View>
-                        )}
-                        {item.latest_chapter_time ? (
-                          <View style={{ position: "absolute", top: 4, left: 4, backgroundColor: colors.danger, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
-                            <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
-                          </View>
-                        ) : null}
-                        {item.status ? (
-                          <View style={{ position: "absolute", bottom: 4, left: 4, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
-                            <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
-                          </View>
-                        ) : null}
-                        {item.country_id ? (
-                          <View style={{ position: "absolute", bottom: 4, right: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
-                            <Text style={{ fontSize: 9 }}>{getFlagEmoji(item.country_id)}</Text>
-                            <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-
-                      <View style={{ flex: 1, gap: 6 }}>
-                        <Text
-                          numberOfLines={2}
-                          style={{
-                            fontSize: 16,
-                            fontWeight: "900",
-                            color: colors.text,
-                          }}
-                        >
-                          {item.title}
+                        marginBottom: 12,
+                      },
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <View style={{ aspectRatio: 2 / 3, width: "100%", position: "relative" }}>
+                      <Image
+                        source={{
+                          uri: item.cover_portrait_url || item.cover_image_url,
+                        }}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          backgroundColor: colors.chip,
+                        }}
+                        resizeMode="cover"
+                      />
+                      {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
+                        <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }}>
+                          <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>NEW</Text>
+                        </View>
+                      )}
+                      {item.latest_chapter_time ? (
+                        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: colors.danger, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
+                        </View>
+                      ) : null}
+                      {item.status ? (
+                        <View style={{ position: "absolute", bottom: 6, left: 6, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
+                        </View>
+                      ) : null}
+                      {item.country_id ? (
+                        <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                          <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
+                          <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={{ padding: 8, gap: 4 }}>
+                      <Text
+                        numberOfLines={2}
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "900",
+                          color: colors.text,
+                        }}
+                      >
+                        {item.title}
+                      </Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginTop: 4,
+                        }}
+                      >
+                        <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "700" }}>
+                          Ch {item.latest_chapter_number || "-"}
                         </Text>
-
-                        <Text numberOfLines={2} style={{ color: colors.subtext }}>
-                          {item.description}
-                        </Text>
-
-                        <View
-                          style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                        >
-                          <View
-                            style={{
-                              backgroundColor: colors.chip,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                              paddingVertical: 6,
-                              paddingHorizontal: 10,
-                              borderRadius: 999,
-                            }}
-                          >
-                            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                              Rate {item.user_rate || 0}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                            <Ionicons name="star" size={12} color="#F5B041" />
+                            <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                              {item.user_rate || "0.0"}
                             </Text>
                           </View>
-
-                          <View
-                            style={{
-                              backgroundColor: colors.chip,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                              paddingVertical: 6,
-                              paddingHorizontal: 10,
-                              borderRadius: 999,
-                            }}
-                          >
-                            <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                              Views {item.view_count.toLocaleString("id-ID")}
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+                            <IconSymbol name="eye" size={12} color={colors.subtext} />
+                            <Text style={{ color: colors.subtext, fontSize: 11 }}>
+                              {item.view_count >= 1000000 
+                                ? (item.view_count / 1000000).toFixed(1) + "M"
+                                : item.view_count >= 1000
+                                ? (item.view_count / 1000).toFixed(1) + "K"
+                                : item.view_count}
                             </Text>
                           </View>
                         </View>
                       </View>
-
-                      <IconSymbol
-                        name="chevron.right"
-                        size={18}
-                        color={colors.subtext}
-                      />
                     </View>
                   </Pressable>
                 );
-              }
-
-              return (
-                <Pressable
-                  key={item.manga_id}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/manga/[mangaId]",
-                      params: toMangaParams(item),
-                    })
-                  }
-                  style={({ pressed }) => [
-                    {
-                      flex: 1,
-                      backgroundColor: colors.card,
-                      borderRadius: 12,
-                      overflow: "hidden",
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      marginBottom: 12,
-                    },
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <View style={{ aspectRatio: 2 / 3, width: "100%", position: "relative" }}>
-                    <Image
-                      source={{
-                        uri: item.cover_portrait_url || item.cover_image_url,
-                      }}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        backgroundColor: colors.chip,
-                      }}
-                      resizeMode="cover"
-                    />
-                    {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
-                      <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }}>
-                        <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>NEW</Text>
-                      </View>
-                    )}
-                    {item.latest_chapter_time ? (
-                      <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: colors.danger, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "900" }}>{item.is_recommended ? "UP " : ""}{parseRelativeTime(item.latest_chapter_time)}</Text>
-                      </View>
-                    ) : null}
-                    {item.status ? (
-                      <View style={{ position: "absolute", bottom: 6, left: 6, backgroundColor: item.status === 1 ? "#34C759" : "#5856D6", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 }}>
-                        <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "900" }}>{getStatusLabel(item.status).toUpperCase()}</Text>
-                      </View>
-                    ) : null}
-                    {item.country_id ? (
-                      <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
-                        <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
-                        <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={{ padding: 8, gap: 4 }}>
-                    <Text
-                      numberOfLines={2}
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "900",
-                        color: colors.text,
-                      }}
-                    >
-                      {item.title}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginTop: 4,
-                      }}
-                    >
-                      <Text style={{ color: colors.subtext, fontSize: 11, fontWeight: "700" }}>
-                        Ch {item.latest_chapter_number || "-"}
-                      </Text>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                          <Ionicons name="star" size={12} color="#F5B041" />
-                          <Text style={{ color: colors.subtext, fontSize: 11 }}>
-                            {item.user_rate || "0.0"}
-                          </Text>
-                        </View>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                          <IconSymbol name="eye" size={12} color={colors.subtext} />
-                          <Text style={{ color: colors.subtext, fontSize: 11 }}>
-                            {item.view_count >= 1000000 
-                              ? (item.view_count / 1000000).toFixed(1) + "M"
-                              : item.view_count >= 1000
-                              ? (item.view_count / 1000).toFixed(1) + "K"
-                              : item.view_count}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-            
-            {/* Pad the last row with empty views if it's a grid */}
-            {isGrid && Array.from({ length: numColumns - row.items.length }).map((_, i) => (
-              <View key={`empty-${i}`} style={{ flex: 1 }} />
-            ))}
+              })}
+              
+              {/* Pad the last row with empty views if it's a grid */}
+              {isGrid && Array.from({ length: numColumns - row.items.length }).map((_, i) => (
+                <View key={`empty-${i}`} style={{ flex: 1 }} />
+              ))}
+            </View>
           </View>
         )}
       />
