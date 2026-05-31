@@ -24,6 +24,7 @@ import type { ShngmChapter, ShngmManga } from "../../src/api/shngmTypes";
 import { isBookmarked, toggleBookmark } from "../../src/store/bookmarks";
 import { getLatestProgressByManga, getReadChaptersLocal } from "../../src/store/history";
 import { getToken } from "../../src/store/authToken";
+import CommentSection from "@/components/manga/CommentSection";
 
 type ResumeState = {
   chapterId: string;
@@ -35,6 +36,7 @@ type ResumeState = {
 type ScreenState = {
   manga: ShngmManga | null;
   chapters: ShngmChapter[];
+  allChapters: ShngmChapter[];
   page: number;
   totalPage: number;
   loading: boolean;
@@ -144,12 +146,15 @@ export default function MangaDetailScreen() {
   const [state, setState] = React.useState<ScreenState>({
     manga: null,
     chapters: [],
+    allChapters: [],
     page: 1,
     totalPage: 1,
     loading: true,
     loadingMore: false,
     error: null,
   });
+
+  const [chapterOffset, setChapterOffset] = React.useState(0);
 
   const routeTitle = typeof title === "string" ? title : "";
   const routeDescription = typeof description === "string" ? description : "";
@@ -309,7 +314,7 @@ export default function MangaDetailScreen() {
       // Ambil detail, chapter terbaru (page 1), dan cari chapter pertama (sort asc)
       const [detailRes, chapterRes, firstChRes] = await Promise.all([
         getMangaDetail(id),
-        getChapterList({ mangaId: id, page: 1, pageSize: 20, sortOrder: sortDir }),
+        getChapterList({ mangaId: id, page: 1, pageSize: 25, sortOrder: sortDir }),
         // Gunakan getChapterList yang sudah ada untuk ambil chapter paling awal
         getChapterList({ mangaId: id, page: 1, pageSize: 1, sortOrder: "asc" }).catch(() => null)
       ]);
@@ -344,54 +349,64 @@ export default function MangaDetailScreen() {
     }
   }, [id, loadResume, loadBookmarkState, sortDir]);
 
-  const loadMore = React.useCallback(async () => {
+  const loadChapters = React.useCallback(async (pageNum: number) => {
     if (!id) return;
 
     try {
-      let nextPage = 0;
-
-      // ambil next page dari state TERBARU biar gak race condition
-      setState((s) => {
-        if (s.loadingMore) return s;
-        if (s.page >= s.totalPage) return s;
-        nextPage = s.page + 1;
-        return { ...s, loadingMore: true };
-      });
-
-      if (nextPage === 0) return;
+      setState((s) => ({ ...s, loadingMore: true, error: null }));
 
       const res = await getChapterList({
         mangaId: id,
-        page: nextPage,
-        pageSize: 20,
+        page: pageNum,
+        pageSize: 25,
         sortOrder: sortDir,
       });
 
-      setState((s) => {
-        // dedupe chapter_id biar gak ada key duplikat kalau API ngirim dobel
-        const map = new Map<string, ShngmChapter>();
-        for (const ch of s.chapters) map.set(ch.chapter_id, ch);
-        for (const ch of res.data) map.set(ch.chapter_id, ch);
-
-        return {
-          ...s,
-          chapters: Array.from(map.values()),
-          page: res.meta.page,
-          totalPage: res.meta.total_page,
-          loadingMore: false,
-        };
-      });
+      setState((s) => ({
+        ...s,
+        chapters: res.data,
+        page: res.meta.page,
+        totalPage: res.meta.total_page,
+        loadingMore: false,
+      }));
       setOffline(false);
+      setTimeout(() => {
+        listRef.current?.scrollToOffset({ offset: chapterOffset, animated: true });
+      }, 50);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       if (isOfflineError(e)) setOffline(true);
       setState((s) => ({ ...s, loadingMore: false, error: msg }));
     }
-  }, [id, sortDir]);
+  }, [id, sortDir, chapterOffset]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  // Load all chapters in background after initial page loading finishes
+  React.useEffect(() => {
+    if (state.loading || !id) return;
+
+    const loadAll = async () => {
+      try {
+        const res = await getChapterList({
+          mangaId: id,
+          page: 1,
+          pageSize: 5000,
+          sortOrder: sortDir,
+        });
+        setState((s) => ({
+          ...s,
+          allChapters: res.data,
+        }));
+      } catch (e) {
+        console.warn("Background load of all chapters failed:", e);
+      }
+    };
+
+    void loadAll();
+  }, [state.loading, id, sortDir]);
 
   // saat balik ke screen ini dari reader / tab lain, refresh resume + bookmark
   useFocusEffect(
@@ -403,7 +418,13 @@ export default function MangaDetailScreen() {
 
   const showDescToggle = displayDescription.length > 140;
   const orderedChapters = React.useMemo(() => {
-    let copy = [...state.chapters];
+    // Jika sedang mencari, lakukan filter pada seluruh list chapter (allChapters)
+    // Jika tidak sedang mencari, gunakan list chapter per halaman (chapters)
+    const source = searchQuery.trim() !== "" && state.allChapters.length > 0
+      ? state.allChapters
+      : state.chapters;
+
+    let copy = [...source];
 
     if (searchQuery.trim() !== "") {
       const q = searchQuery.trim().toLowerCase();
@@ -420,7 +441,7 @@ export default function MangaDetailScreen() {
       return sortDir === "desc" ? bNum - aNum : aNum - bNum;
     });
     return copy;
-  }, [state.chapters, sortDir, searchQuery]);
+  }, [state.chapters, state.allChapters, sortDir, searchQuery]);
 
   const jumpIndex = React.useMemo(() => {
     if (orderedChapters.length === 0) return 0;
@@ -1012,7 +1033,12 @@ export default function MangaDetailScreen() {
         )}
 
         {/* Spacer between metadata and chapter list */}
-        <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 22 }} />
+        <View
+          onLayout={(e) => {
+            setChapterOffset(e.nativeEvent.layout.y);
+          }}
+          style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 22 }}
+        />
 
         {/* ── Chapter List Header Row (Chapter, Awal, Jump, Sort) ── */}
         <View
@@ -1171,10 +1197,6 @@ export default function MangaDetailScreen() {
           paddingBottom: bottomInset,
           paddingTop: 0,
         }}
-        onEndReachedThreshold={0.6}
-        onEndReached={() => {
-          if (!state.loadingMore) void loadMore();
-        }}
         ListEmptyComponent={
           <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding, paddingVertical: 48, alignItems: "center", gap: 12 }}>
             {offline ? (
@@ -1212,13 +1234,111 @@ export default function MangaDetailScreen() {
               <View style={{ paddingVertical: 24 }}>
                 <ActivityIndicator color={colors.primary} />
               </View>
-            ) : state.chapters.length > 0 && state.page >= state.totalPage ? (
-              <View style={{ paddingVertical: 24, alignItems: "center" }}>
-                <Text style={{ color: colors.subtext, fontSize: 13, fontWeight: "500" }}>
-                  Tidak ada chapter lagi.
-                </Text>
-              </View>
             ) : null}
+
+            {/* Pagination Controls */}
+            {!state.loadingMore && searchQuery.trim() === "" && state.totalPage > 1 && (
+              <View style={{ alignItems: "center", marginVertical: 20, gap: 10 }}>
+                {/* Page indicator above buttons */}
+                <Text style={{ color: colors.text, fontWeight: "900", fontSize: 14 }}>
+                  Halaman {state.page} dari {state.totalPage}
+                </Text>
+
+                {/* Inline page buttons row */}
+                <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 }}>
+                  {/* Prev Button */}
+                  <Pressable
+                    disabled={state.page <= 1}
+                    onPress={() => void loadChapters(state.page - 1)}
+                    style={({ pressed }) => ({
+                      width: 50,
+                      height: 50,
+                      borderRadius: 8,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: colors.chip,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: state.page <= 1 ? 0.35 : pressed ? 0.75 : 1,
+                    })}
+                  >
+                    <Ionicons name="chevron-back" size={18} color={state.page <= 1 ? colors.subtext : colors.text} />
+                  </Pressable>
+
+                  {/* Page Number Buttons */}
+                  {(() => {
+                    const pages = [];
+                    const total = state.totalPage;
+                    const current = state.page;
+
+                    // Show up to 5 page buttons around the current page
+                    let start = Math.max(1, current - 2);
+                    let end = Math.min(total, current + 2);
+                    if (current <= 3) {
+                      end = Math.min(total, 5);
+                    } else if (current >= total - 2) {
+                      start = Math.max(1, total - 4);
+                    }
+
+                    for (let i = start; i <= end; i++) {
+                      pages.push(i);
+                    }
+
+                    return pages.map((p) => {
+                      const isActive = p === current;
+                      return (
+                        <Pressable
+                          key={`page-btn-${p}`}
+                          onPress={() => void loadChapters(p)}
+                          style={({ pressed }) => ({
+                            width: 42,
+                            height: 42,
+                            borderRadius: 8,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: isActive ? "#6C5CE7" : colors.chip,
+                            borderWidth: 1,
+                            borderColor: isActive ? "#6C5CE7" : colors.border,
+                            opacity: pressed ? 0.8 : 1,
+                          })}
+                        >
+                          <Text
+                            style={{
+                              color: isActive ? "#FFF" : colors.text,
+                              fontWeight: "900",
+                              fontSize: 15,
+                            }}
+                          >
+                            {p}
+                          </Text>
+                        </Pressable>
+                      );
+                    });
+                  })()}
+                  
+                  {/* Next Button */}
+                  <Pressable
+                    disabled={state.page >= state.totalPage}
+                    onPress={() => void loadChapters(state.page + 1)}
+                    style={({ pressed }) => ({
+                      width: 50,
+                      height: 50,
+                      borderRadius: 8,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: colors.chip,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      opacity: state.page >= state.totalPage ? 0.35 : pressed ? 0.75 : 1,
+                    })}
+                  >
+                    <Ionicons name="chevron-forward" size={18} color={state.page >= state.totalPage ? colors.subtext : colors.text} />
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            <CommentSection mangaId={id} />
           </View>
         }
         renderItem={({ item }) => (

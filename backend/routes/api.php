@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BookmarkController;
+use App\Http\Controllers\Api\CommentController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\UpdatesController;
@@ -46,6 +47,8 @@ Route::prefix('auth')->group(function () {
     Route::post('login',    [AuthController::class, 'login']);
 });
 
+Route::get('comments/{mangaId}', [CommentController::class, 'index']);
+
 // Tambahkan throttle middleware
 Route::middleware('throttle:5,1')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
@@ -89,5 +92,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('check',       [UpdatesController::class, 'check']);
         Route::delete('{mangaId}', [UpdatesController::class, 'dismiss']);
         Route::delete('/',         [UpdatesController::class, 'clearAll']);
+    });
+
+    // Comments (Protected)
+    Route::prefix('comments')->group(function () {
+        Route::post('{mangaId}',         [CommentController::class, 'store']);
+        Route::post('{commentId}/like',   [CommentController::class, 'like']);
+        Route::post('{commentId}/report', [CommentController::class, 'report']);
     });
 });

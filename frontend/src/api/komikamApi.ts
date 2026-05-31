@@ -54,9 +54,9 @@ async function request<T>(
     "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36",
   };
 
-  if (requireAuth) {
-    const token = await getToken();
-    if (!token) throw new KomikamAuthError();
+  const token = await getToken();
+  if (requireAuth && !token) throw new KomikamAuthError();
+  if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
@@ -230,4 +230,59 @@ export async function apiDismissUpdate(mangaId: string): Promise<void> {
 
 export async function apiClearUpdates(): Promise<void> {
   await request("DELETE", "/updates");
+}
+
+// ─── COMMENTS ──────────────────────────────────────────────────────────────
+
+export type ApiComment = {
+  id: number;
+  user_id: number;
+  user_name: string;
+  manga_id: string;
+  content: string;
+  status: "active" | "reported" | "deleted";
+  likes_count: number;
+  liked_by_me: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaginatedComments = {
+  current_page: number;
+  data: ApiComment[];
+  last_page: number;
+  per_page: number;
+  total: number;
+};
+
+export async function apiGetComments(
+  mangaId: string,
+  sort: "latest" | "popular" = "latest",
+  page: number = 1,
+): Promise<PaginatedComments> {
+  return request<PaginatedComments>(
+    "GET",
+    `/comments/${encodeURIComponent(mangaId)}?sort=${sort}&page=${page}`,
+    undefined,
+    false,
+  );
+}
+
+export async function apiPostComment(
+  mangaId: string,
+  content: string,
+): Promise<{ message: string; comment: ApiComment }> {
+  return request("POST", `/comments/${encodeURIComponent(mangaId)}`, { content });
+}
+
+export async function apiLikeComment(
+  commentId: number,
+): Promise<{ message: string; liked: boolean; likes_count: number }> {
+  return request("POST", `/comments/${commentId}/like`);
+}
+
+export async function apiReportComment(
+  commentId: number,
+): Promise<{ message: string; status: string }> {
+  return request("POST", `/comments/${commentId}/report`);
 }
