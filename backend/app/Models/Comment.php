@@ -10,6 +10,7 @@ class Comment extends Model
 {
     protected $fillable = [
         'user_id',
+        'parent_id',
         'manga_id',
         'content',
         'status',
@@ -23,5 +24,15 @@ class Comment extends Model
     public function likes(): HasMany
     {
         return $this->hasMany(CommentLike::class);
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Comment::class, 'parent_id');
+    }
+
+    public function replies(): HasMany
+    {
+        return $this->hasMany(Comment::class, 'parent_id');
     }
 }

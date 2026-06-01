@@ -19,10 +19,17 @@ class CommentController extends Controller
         $user = auth('sanctum')->user();
         $userId = $user ? $user->id : null;
 
-        $commentsQuery = Comment::with(['user'])
-            ->withCount('likes')
-            ->where('manga_id', $mangaId)
-            ->where('status', '!=', 'deleted');
+        $commentsQuery = Comment::with([
+            'user',
+            'replies' => function ($query) {
+                $query->withCount('likes')->where('status', '!=', 'deleted');
+            },
+            'replies.user'
+        ])
+        ->withCount('likes')
+        ->whereNull('parent_id')
+        ->where('manga_id', $mangaId)
+        ->where('status', '!=', 'deleted');
 
         if ($request->query('sort') === 'popular') {
             $commentsQuery->orderByDesc('likes_count')->orderByDesc('created_at');
@@ -41,15 +48,40 @@ class CommentController extends Controller
                     ->exists();
             }
 
+            $replies = $comment->replies->map(function ($reply) use ($userId) {
+                $replyLikedByMe = false;
+                if ($userId) {
+                    $replyLikedByMe = CommentLike::where('user_id', $userId)
+                        ->where('comment_id', $reply->id)
+                        ->exists();
+                }
+
+                return [
+                    'id' => $reply->id,
+                    'user_id' => $reply->user_id,
+                    'user_name' => $reply->user ? $reply->user->name : 'User Komikam',
+                    'parent_id' => $reply->parent_id,
+                    'manga_id' => $reply->manga_id,
+                    'content' => $reply->content,
+                    'status' => $reply->status,
+                    'likes_count' => $reply->likes_count,
+                    'liked_by_me' => $replyLikedByMe,
+                    'created_at' => $reply->created_at->toIso8601String(),
+                    'updated_at' => $reply->updated_at->toIso8601String(),
+                ];
+            });
+
             return [
                 'id' => $comment->id,
                 'user_id' => $comment->user_id,
                 'user_name' => $comment->user ? $comment->user->name : 'User Komikam',
+                'parent_id' => $comment->parent_id,
                 'manga_id' => $comment->manga_id,
                 'content' => $comment->content,
                 'status' => $comment->status,
                 'likes_count' => $comment->likes_count,
                 'liked_by_me' => $likedByMe,
+                'replies' => $replies,
                 'created_at' => $comment->created_at->toIso8601String(),
                 'updated_at' => $comment->updated_at->toIso8601String(),
             ];
@@ -72,6 +104,7 @@ class CommentController extends Controller
 
         $comment = Comment::create([
             'user_id' => $request->user()->id,
+            'parent_id' => null,
             'manga_id' => $mangaId,
             'content' => $data['content'],
             'status' => 'active',
@@ -85,6 +118,7 @@ class CommentController extends Controller
                 'id' => $comment->id,
                 'user_id' => $comment->user_id,
                 'user_name' => $comment->user->name,
+                'parent_id' => $comment->parent_id,
                 'manga_id' => $comment->manga_id,
                 'content' => $comment->content,
                 'status' => $comment->status,
@@ -92,6 +126,54 @@ class CommentController extends Controller
                 'liked_by_me' => false,
                 'created_at' => $comment->created_at->toIso8601String(),
                 'updated_at' => $comment->updated_at->toIso8601String(),
+            ]
+        ], 201);
+    }
+
+    /**
+     * POST /api/comments/{commentId}/reply
+     * Create a new reply to a comment.
+     */
+    public function storeReply(Request $request, int $commentId): JsonResponse
+    {
+        $parent = Comment::where('status', '!=', 'deleted')->find($commentId);
+        if (!$parent) {
+            return response()->json(['message' => 'Komentar utama tidak ditemukan.'], 404);
+        }
+
+        // Batasi kedalaman reply hanya 1 level: parent comment must have parent_id = null
+        if ($parent->parent_id !== null) {
+            return response()->json(['message' => 'Tidak dapat membalas sebuah balasan komentar.'], 400);
+        }
+
+        $data = $request->validate([
+            'content' => ['required', 'string', 'min:1', 'max:200'],
+        ]);
+
+        $reply = Comment::create([
+            'user_id' => $request->user()->id,
+            'parent_id' => $parent->id,
+            'manga_id' => $parent->manga_id,
+            'content' => $data['content'],
+            'status' => 'active',
+        ]);
+
+        $reply->load('user');
+
+        return response()->json([
+            'message' => 'Balasan berhasil ditambahkan.',
+            'comment' => [
+                'id' => $reply->id,
+                'user_id' => $reply->user_id,
+                'user_name' => $reply->user->name,
+                'parent_id' => $reply->parent_id,
+                'manga_id' => $reply->manga_id,
+                'content' => $reply->content,
+                'status' => $reply->status,
+                'likes_count' => 0,
+                'liked_by_me' => false,
+                'created_at' => $reply->created_at->toIso8601String(),
+                'updated_at' => $reply->updated_at->toIso8601String(),
             ]
         ], 201);
     }

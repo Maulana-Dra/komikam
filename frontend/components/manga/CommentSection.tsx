@@ -17,6 +17,7 @@ import { getProfile, type AccountProfile } from "@/src/store/account";
 import {
   apiGetComments,
   apiPostComment,
+  apiPostReply,
   apiLikeComment,
   apiReportComment,
   type ApiComment,
@@ -64,6 +65,12 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   const [loading, setLoading] = React.useState(true);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+
+  // New states for reply feature
+  const [activeReplyId, setActiveReplyId] = React.useState<number | null>(null);
+  const [replyText, setReplyText] = React.useState("");
+  const [submittingReply, setSubmittingReply] = React.useState(false);
+  const [expandedCommentIds, setExpandedCommentIds] = React.useState<Record<number, boolean>>({});
 
   // Load user profile & initial comments
   React.useEffect(() => {
@@ -136,6 +143,47 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
     }
   }, [commentText, mangaId, sort, loadComments, submitting]);
 
+  const handlePostReply = React.useCallback(async (commentId: number) => {
+    const trimmed = replyText.trim();
+    if (!trimmed || trimmed.length > 200 || submittingReply) return;
+
+    setSubmittingReply(true);
+    try {
+      const res = await apiPostReply(commentId, trimmed);
+      setReplyText("");
+      setActiveReplyId(null);
+
+      // Add reply to parent comment in state
+      setComments((prev) =>
+        prev.map((c) => {
+          if (c.id === commentId) {
+            const currentReplies = c.replies || [];
+            return {
+              ...c,
+              replies: [...currentReplies, res.comment],
+            };
+          }
+          return c;
+        })
+      );
+
+      // Auto expand replies for this comment
+      setExpandedCommentIds((prev) => ({
+        ...prev,
+        [commentId]: true,
+      }));
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : "Gagal mengirim balasan";
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    } finally {
+      setSubmittingReply(false);
+    }
+  }, [replyText, submittingReply]);
+
   const handleLike = React.useCallback(
     async (commentId: number) => {
       if (!profile) {
@@ -160,6 +208,24 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                 : Math.max(0, c.likes_count - 1),
             };
           }
+          if (c.replies && c.replies.length > 0) {
+            return {
+              ...c,
+              replies: c.replies.map((r) => {
+                if (r.id === commentId) {
+                  const nextLiked = !r.liked_by_me;
+                  return {
+                    ...r,
+                    liked_by_me: nextLiked,
+                    likes_count: nextLiked
+                      ? r.likes_count + 1
+                      : Math.max(0, r.likes_count - 1),
+                  };
+                }
+                return r;
+              }),
+            };
+          }
           return c;
         })
       );
@@ -174,6 +240,21 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                 ...c,
                 liked_by_me: res.liked,
                 likes_count: res.likes_count,
+              };
+            }
+            if (c.replies && c.replies.length > 0) {
+              return {
+                ...c,
+                replies: c.replies.map((r) => {
+                  if (r.id === commentId) {
+                    return {
+                      ...r,
+                      liked_by_me: res.liked,
+                      likes_count: res.likes_count,
+                    };
+                  }
+                  return r;
+                }),
               };
             }
             return c;
@@ -206,6 +287,17 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
             prev.map((c) => {
               if (c.id === commentId) {
                 return { ...c, status: "reported" as const };
+              }
+              if (c.replies && c.replies.length > 0) {
+                return {
+                  ...c,
+                  replies: c.replies.map((r) => {
+                    if (r.id === commentId) {
+                      return { ...r, status: "reported" as const };
+                    }
+                    return r;
+                  }),
+                };
               }
               return c;
             })
@@ -437,90 +529,317 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
           </Text>
         </View>
       ) : (
-        <View style={{ gap: 12 }}>
+        <View style={{ gap: 16 }}>
           {comments.map((item) => (
-            <View
-              key={`comment-${item.id}`}
-              style={[
-                styles.commentItem,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View style={styles.commentHeader}>
-                <View style={styles.commentUserRow}>
-                  {/* Profile Avatar */}
-                  <View
-                    style={[
-                      styles.avatarCircleSmall,
-                      { backgroundColor: getAvatarBgColor(item.user_name) },
-                    ]}
-                  >
-                    <Text style={styles.avatarTextSmall}>
-                      {getInitials(item.user_name)}
-                    </Text>
+            <View key={`comment-group-${item.id}`} style={{ gap: 8 }}>
+              {/* Main Comment Card */}
+              <View
+                style={[
+                  styles.commentItem,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.commentHeader}>
+                  <View style={styles.commentUserRow}>
+                    {/* Profile Avatar */}
+                    <View
+                      style={[
+                        styles.avatarCircleSmall,
+                        { backgroundColor: getAvatarBgColor(item.user_name) },
+                      ]}
+                    >
+                      <Text style={styles.avatarTextSmall}>
+                        {getInitials(item.user_name)}
+                      </Text>
+                    </View>
+                    <View style={{ gap: 2 }}>
+                      <Text style={[styles.userNameText, { color: colors.text }]}>
+                        {item.user_name}
+                      </Text>
+                      <Text style={[styles.timeText, { color: colors.subtext }]}>
+                        {formatRelativeTime(item.created_at)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ gap: 2 }}>
-                    <Text style={[styles.userNameText, { color: colors.text }]}>
-                      {item.user_name}
-                    </Text>
-                    <Text style={[styles.timeText, { color: colors.subtext }]}>
-                      {formatRelativeTime(item.created_at)}
-                    </Text>
-                  </View>
+
+                  {/* Report Action Button */}
+                  {item.status === "reported" ? (
+                    <View style={styles.reportedIndicator}>
+                      <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
+                      <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
+                        Dilaporkan
+                      </Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={() => handleReport(item.id)}
+                      style={({ pressed }) => [
+                        styles.reportButton,
+                        { opacity: pressed ? 0.6 : 1 },
+                      ]}
+                    >
+                      <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
+                    </Pressable>
+                  )}
                 </View>
 
-                {/* Report Action Button (Only show if not already reported by default, or just show report status) */}
-                {item.status === "reported" ? (
-                  <View style={styles.reportedIndicator}>
-                    <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
-                    <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
-                      Dilaporkan
-                    </Text>
-                  </View>
-                ) : (
+                <Text style={[styles.commentContentText, { color: colors.text }]}>
+                  {item.content}
+                </Text>
+
+                {/* Comment Footer (Like & Reply buttons) */}
+                <View style={[styles.commentFooterRow, { gap: 12 }]}>
                   <Pressable
-                    onPress={() => handleReport(item.id)}
+                    onPress={() => handleLike(item.id)}
                     style={({ pressed }) => [
-                      styles.reportButton,
-                      { opacity: pressed ? 0.6 : 1 },
+                      styles.likeButton,
+                      { opacity: pressed ? 0.8 : 1 },
                     ]}
                   >
-                    <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
+                    <Ionicons
+                      name={item.liked_by_me ? "heart" : "heart-outline"}
+                      size={16}
+                      color={item.liked_by_me ? colors.accent : colors.subtext}
+                    />
+                    <Text
+                      style={[
+                        styles.likeCountText,
+                        { color: item.liked_by_me ? colors.accent : colors.subtext },
+                      ]}
+                    >
+                      {item.likes_count}
+                    </Text>
                   </Pressable>
-                )}
+
+                  <Pressable
+                    onPress={() => {
+                      if (!profile) {
+                        if (Platform.OS === "web") {
+                          window.alert("Silakan login terlebih dahulu untuk membalas komentar.");
+                        } else {
+                          Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk membalas komentar.");
+                        }
+                        return;
+                      }
+                      setActiveReplyId(item.id);
+                      setReplyText(`@${item.user_name} `);
+                    }}
+                    style={({ pressed }) => [
+                      styles.replyButton,
+                      { opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={15}
+                      color={colors.subtext}
+                    />
+                    <Text style={[styles.replyButtonText, { color: colors.subtext }]}>
+                      Balas
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
-              <Text style={[styles.commentContentText, { color: colors.text }]}>
-                {item.content}
-              </Text>
-
-              {/* Comment Footer (Like counts) */}
-              <View style={styles.commentFooterRow}>
+              {/* Toggle replies button if replies exist */}
+              {item.replies && item.replies.length > 0 && (
                 <Pressable
-                  onPress={() => handleLike(item.id)}
-                  style={({ pressed }) => [
-                    styles.likeButton,
-                    { opacity: pressed ? 0.8 : 1 },
-                  ]}
+                  onPress={() => {
+                    setExpandedCommentIds((prev) => ({
+                      ...prev,
+                      [item.id]: !prev[item.id],
+                    }));
+                  }}
+                  style={styles.toggleRepliesButton}
                 >
                   <Ionicons
-                    name={item.liked_by_me ? "heart" : "heart-outline"}
+                    name={expandedCommentIds[item.id] ? "chevron-up" : "chevron-down"}
                     size={16}
-                    color={item.liked_by_me ? colors.accent : colors.subtext}
+                    color={colors.accent}
                   />
-                  <Text
-                    style={[
-                      styles.likeCountText,
-                      { color: item.liked_by_me ? colors.accent : colors.subtext },
-                    ]}
-                  >
-                    {item.likes_count}
+                  <Text style={[styles.toggleRepliesText, { color: colors.accent }]}>
+                    {expandedCommentIds[item.id]
+                      ? "Sembunyikan balasan"
+                      : `Lihat ${item.replies.length} balasan`}
                   </Text>
                 </Pressable>
-              </View>
+              )}
+
+              {/* Inline Reply Form */}
+              {activeReplyId === item.id && (
+                <View
+                  style={[
+                    styles.replyFormContainer,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      marginLeft: 24,
+                    },
+                  ]}
+                >
+                  <View style={styles.inputInnerRow}>
+                    {profile && (
+                      <View
+                        style={[
+                          styles.avatarCircleSmall,
+                          { backgroundColor: getAvatarBgColor(profile.name) },
+                        ]}
+                      >
+                        <Text style={styles.avatarTextSmall}>{getInitials(profile.name)}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <TextInput
+                        value={replyText}
+                        onChangeText={setReplyText}
+                        placeholder={`Balas ${item.user_name}...`}
+                        placeholderTextColor={colors.placeholder}
+                        multiline
+                        maxLength={250}
+                        style={[styles.textInput, { color: colors.inputText }]}
+                        autoFocus
+                      />
+                      <View style={styles.inputFooter}>
+                        <Text
+                          style={[
+                            styles.charCounter,
+                            {
+                              color: replyText.length > 200
+                                ? colors.danger
+                                : replyText.length > 180
+                                ? "#FFA500"
+                                : colors.subtext,
+                            },
+                          ]}
+                        >
+                          {replyText.length}/200
+                        </Text>
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <Pressable
+                            onPress={() => setActiveReplyId(null)}
+                            style={styles.cancelReplyButton}
+                          >
+                            <Text style={[styles.cancelReplyText, { color: colors.subtext }]}>Batal</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handlePostReply(item.id)}
+                            disabled={!replyText.trim() || replyText.length > 200 || submittingReply}
+                            style={({ pressed }) => [
+                              styles.sendButton,
+                              {
+                                backgroundColor:
+                                  !replyText.trim() || replyText.length > 200
+                                    ? colors.chip
+                                    : colors.accent,
+                                opacity: pressed ? 0.8 : 1,
+                              },
+                            ]}
+                          >
+                            {submittingReply ? (
+                              <ActivityIndicator size="small" color="#FFF" />
+                            ) : (
+                              <Text style={styles.sendButtonText}>Balas</Text>
+                            )}
+                          </Pressable>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Render Nested Replies */}
+              {expandedCommentIds[item.id] && item.replies && item.replies.length > 0 && (
+                <View style={[styles.repliesListContainer, { borderLeftColor: colors.border }]}>
+                  {item.replies.map((reply) => (
+                    <View
+                      key={`reply-${reply.id}`}
+                      style={[
+                        styles.replyItem,
+                        {
+                          backgroundColor: colors.card,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.commentHeader}>
+                        <View style={styles.commentUserRow}>
+                          <View
+                            style={[
+                              styles.avatarCircleSmall,
+                              { backgroundColor: getAvatarBgColor(reply.user_name) },
+                            ]}
+                          >
+                            <Text style={styles.avatarTextSmall}>
+                              {getInitials(reply.user_name)}
+                            </Text>
+                          </View>
+                          <View style={{ gap: 2 }}>
+                            <Text style={[styles.userNameText, { color: colors.text }]}>
+                              {reply.user_name}
+                            </Text>
+                            <Text style={[styles.timeText, { color: colors.subtext }]}>
+                              {formatRelativeTime(reply.created_at)}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Report Action Button */}
+                        {reply.status === "reported" ? (
+                          <View style={styles.reportedIndicator}>
+                            <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
+                            <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
+                              Dilaporkan
+                            </Text>
+                          </View>
+                        ) : (
+                          <Pressable
+                            onPress={() => handleReport(reply.id)}
+                            style={({ pressed }) => [
+                              styles.reportButton,
+                              { opacity: pressed ? 0.6 : 1 },
+                            ]}
+                          >
+                            <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
+                          </Pressable>
+                        )}
+                      </View>
+
+                      <Text style={[styles.commentContentText, { color: colors.text }]}>
+                        {reply.content}
+                      </Text>
+
+                      {/* Reply Footer (Like counts) */}
+                      <View style={styles.commentFooterRow}>
+                        <Pressable
+                          onPress={() => handleLike(reply.id)}
+                          style={({ pressed }) => [
+                            styles.likeButton,
+                            { opacity: pressed ? 0.8 : 1 },
+                          ]}
+                        >
+                          <Ionicons
+                            name={reply.liked_by_me ? "heart" : "heart-outline"}
+                            size={16}
+                            color={reply.liked_by_me ? colors.accent : colors.subtext}
+                          />
+                          <Text
+                            style={[
+                              styles.likeCountText,
+                              { color: reply.liked_by_me ? colors.accent : colors.subtext },
+                            ]}
+                          >
+                            {reply.likes_count}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           ))}
 
@@ -753,6 +1072,62 @@ const styles = StyleSheet.create({
   },
   loadMoreText: {
     fontSize: 13,
+    fontWeight: "800",
+  },
+  repliesListContainer: {
+    marginLeft: 24,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    gap: 8,
+    marginTop: 4,
+  },
+  replyItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 8,
+  },
+  replyFormContainer: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 8,
+    marginTop: 4,
+  },
+  cancelReplyButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelReplyText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  toggleRepliesButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignSelf: "flex-start",
+  },
+  toggleRepliesText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  replyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(100,100,100,0.05)",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  replyButtonText: {
+    fontSize: 12,
     fontWeight: "800",
   },
 });

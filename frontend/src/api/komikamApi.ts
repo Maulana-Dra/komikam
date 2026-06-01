@@ -243,6 +243,8 @@ export type ApiComment = {
   status: "active" | "reported" | "deleted";
   likes_count: number;
   liked_by_me: boolean;
+  parent_id?: number | null;
+  replies?: ApiComment[];
   created_at: string;
   updated_at: string;
 };
@@ -273,6 +275,13 @@ export async function apiPostComment(
   content: string,
 ): Promise<{ message: string; comment: ApiComment }> {
   return request("POST", `/comments/${encodeURIComponent(mangaId)}`, { content });
+}
+
+export async function apiPostReply(
+  commentId: number,
+  content: string,
+): Promise<{ message: string; comment: ApiComment }> {
+  return request("POST", `/comments/${commentId}/reply`, { content });
 }
 
 export async function apiLikeComment(
