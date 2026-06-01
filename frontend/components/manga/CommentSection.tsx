@@ -72,6 +72,29 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   const [submittingReply, setSubmittingReply] = React.useState(false);
   const [expandedCommentIds, setExpandedCommentIds] = React.useState<Record<number, boolean>>({});
 
+  // Memoized target comment being replied to
+  const targetComment = React.useMemo(() => {
+    if (activeReplyId === null) return null;
+    for (const c of comments) {
+      if (c.id === activeReplyId) return c;
+      if (c.replies) {
+        const found = c.replies.find((r) => r.id === activeReplyId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, [activeReplyId, comments]);
+
+  // Memoized clean reply character count (ignoring prefix mention)
+  const replyCharCount = React.useMemo(() => {
+    if (!targetComment) return replyText.length;
+    const prefix = `@${targetComment.user_name} `;
+    if (replyText.startsWith(prefix)) {
+      return replyText.slice(prefix.length).length;
+    }
+    return replyText.length;
+  }, [replyText, targetComment]);
+
   // Load user profile & initial comments
   React.useEffect(() => {
     const init = async () => {
@@ -143,20 +166,61 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
     }
   }, [commentText, mangaId, sort, loadComments, submitting]);
 
-  const handlePostReply = React.useCallback(async (commentId: number) => {
+  const handleReplyPress = React.useCallback((comment: ApiComment) => {
+    if (!profile) {
+      if (Platform.OS === "web") {
+        window.alert("Silakan login terlebih dahulu untuk membalas komentar.");
+      } else {
+        Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk membalas komentar.");
+      }
+      return;
+    }
+    const parentId = comment.parent_id || comment.id;
+    setActiveReplyId(comment.id);
+    setReplyText(`@${comment.user_name} `);
+
+    // Auto-expand parent replies
+    setExpandedCommentIds((prev) => ({
+      ...prev,
+      [parentId]: true,
+    }));
+  }, [profile]);
+
+  const handlePostReply = React.useCallback(async (parentCommentId: number) => {
     const trimmed = replyText.trim();
-    if (!trimmed || trimmed.length > 200 || submittingReply) return;
+    if (!trimmed || submittingReply) return;
+
+    // Calculate length excluding mention for validation
+    let actualLength = trimmed.length;
+    let replyToUserId: number | undefined = undefined;
+
+    if (targetComment) {
+      const prefix = `@${targetComment.user_name} `;
+      if (trimmed.startsWith(prefix)) {
+        actualLength = trimmed.slice(prefix.length).length;
+        replyToUserId = targetComment.user_id;
+      }
+    }
+
+    if (actualLength > 200) {
+      if (Platform.OS === "web") {
+        window.alert("Balasan tidak boleh lebih dari 200 karakter.");
+      } else {
+        Alert.alert("Error", "Balasan tidak boleh lebih dari 200 karakter.");
+      }
+      return;
+    }
 
     setSubmittingReply(true);
     try {
-      const res = await apiPostReply(commentId, trimmed);
+      const res = await apiPostReply(activeReplyId!, trimmed, replyToUserId);
       setReplyText("");
       setActiveReplyId(null);
 
       // Add reply to parent comment in state
       setComments((prev) =>
         prev.map((c) => {
-          if (c.id === commentId) {
+          if (c.id === parentCommentId) {
             const currentReplies = c.replies || [];
             return {
               ...c,
@@ -170,7 +234,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       // Auto expand replies for this comment
       setExpandedCommentIds((prev) => ({
         ...prev,
-        [commentId]: true,
+        [parentCommentId]: true,
       }));
     } catch (e: any) {
       const msg = e instanceof Error ? e.message : "Gagal mengirim balasan";
@@ -182,7 +246,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
     } finally {
       setSubmittingReply(false);
     }
-  }, [replyText, submittingReply]);
+  }, [replyText, submittingReply, activeReplyId, targetComment]);
 
   const handleLike = React.useCallback(
     async (commentId: number) => {
@@ -530,318 +594,338 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
         </View>
       ) : (
         <View style={{ gap: 16 }}>
-          {comments.map((item) => (
-            <View key={`comment-group-${item.id}`} style={{ gap: 8 }}>
-              {/* Main Comment Card */}
-              <View
-                style={[
-                  styles.commentItem,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.commentHeader}>
-                  <View style={styles.commentUserRow}>
-                    {/* Profile Avatar */}
-                    <View
-                      style={[
-                        styles.avatarCircleSmall,
-                        { backgroundColor: getAvatarBgColor(item.user_name) },
-                      ]}
-                    >
-                      <Text style={styles.avatarTextSmall}>
-                        {getInitials(item.user_name)}
-                      </Text>
-                    </View>
-                    <View style={{ gap: 2 }}>
-                      <Text style={[styles.userNameText, { color: colors.text }]}>
-                        {item.user_name}
-                      </Text>
-                      <Text style={[styles.timeText, { color: colors.subtext }]}>
-                        {formatRelativeTime(item.created_at)}
-                      </Text>
-                    </View>
-                  </View>
+          {comments.map((item) => {
+            const isFormActiveForThisComment =
+              activeReplyId === item.id ||
+              (item.replies && item.replies.some((r) => r.id === activeReplyId));
 
-                  {/* Report Action Button */}
-                  {item.status === "reported" ? (
-                    <View style={styles.reportedIndicator}>
-                      <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
-                      <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
-                        Dilaporkan
-                      </Text>
-                    </View>
-                  ) : (
-                    <Pressable
-                      onPress={() => handleReport(item.id)}
-                      style={({ pressed }) => [
-                        styles.reportButton,
-                        { opacity: pressed ? 0.6 : 1 },
-                      ]}
-                    >
-                      <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
-                    </Pressable>
-                  )}
-                </View>
-
-                <Text style={[styles.commentContentText, { color: colors.text }]}>
-                  {item.content}
-                </Text>
-
-                {/* Comment Footer (Like & Reply buttons) */}
-                <View style={[styles.commentFooterRow, { gap: 12 }]}>
-                  <Pressable
-                    onPress={() => handleLike(item.id)}
-                    style={({ pressed }) => [
-                      styles.likeButton,
-                      { opacity: pressed ? 0.8 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={item.liked_by_me ? "heart" : "heart-outline"}
-                      size={16}
-                      color={item.liked_by_me ? colors.accent : colors.subtext}
-                    />
-                    <Text
-                      style={[
-                        styles.likeCountText,
-                        { color: item.liked_by_me ? colors.accent : colors.subtext },
-                      ]}
-                    >
-                      {item.likes_count}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={() => {
-                      if (!profile) {
-                        if (Platform.OS === "web") {
-                          window.alert("Silakan login terlebih dahulu untuk membalas komentar.");
-                        } else {
-                          Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk membalas komentar.");
-                        }
-                        return;
-                      }
-                      setActiveReplyId(item.id);
-                      setReplyText(`@${item.user_name} `);
-                    }}
-                    style={({ pressed }) => [
-                      styles.replyButton,
-                      { opacity: pressed ? 0.8 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name="chatbubble-outline"
-                      size={15}
-                      color={colors.subtext}
-                    />
-                    <Text style={[styles.replyButtonText, { color: colors.subtext }]}>
-                      Balas
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Toggle replies button if replies exist */}
-              {item.replies && item.replies.length > 0 && (
-                <Pressable
-                  onPress={() => {
-                    setExpandedCommentIds((prev) => ({
-                      ...prev,
-                      [item.id]: !prev[item.id],
-                    }));
-                  }}
-                  style={styles.toggleRepliesButton}
-                >
-                  <Ionicons
-                    name={expandedCommentIds[item.id] ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={colors.accent}
-                  />
-                  <Text style={[styles.toggleRepliesText, { color: colors.accent }]}>
-                    {expandedCommentIds[item.id]
-                      ? "Sembunyikan balasan"
-                      : `Lihat ${item.replies.length} balasan`}
-                  </Text>
-                </Pressable>
-              )}
-
-              {/* Inline Reply Form */}
-              {activeReplyId === item.id && (
+            return (
+              <View key={`comment-group-${item.id}`} style={{ gap: 8 }}>
+                {/* Main Comment Card */}
                 <View
                   style={[
-                    styles.replyFormContainer,
+                    styles.commentItem,
                     {
                       backgroundColor: colors.card,
                       borderColor: colors.border,
-                      marginLeft: 24,
                     },
                   ]}
                 >
-                  <View style={styles.inputInnerRow}>
-                    {profile && (
+                  <View style={styles.commentHeader}>
+                    <View style={styles.commentUserRow}>
+                      {/* Profile Avatar */}
                       <View
                         style={[
                           styles.avatarCircleSmall,
-                          { backgroundColor: getAvatarBgColor(profile.name) },
+                          { backgroundColor: getAvatarBgColor(item.user_name) },
                         ]}
                       >
-                        <Text style={styles.avatarTextSmall}>{getInitials(profile.name)}</Text>
+                        <Text style={styles.avatarTextSmall}>
+                          {getInitials(item.user_name)}
+                        </Text>
                       </View>
+                      <View style={{ gap: 2 }}>
+                        <Text style={[styles.userNameText, { color: colors.text }]}>
+                          {item.user_name}
+                        </Text>
+                        <Text style={[styles.timeText, { color: colors.subtext }]}>
+                          {formatRelativeTime(item.created_at)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Report Action Button */}
+                    {item.status === "reported" ? (
+                      <View style={styles.reportedIndicator}>
+                        <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
+                        <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
+                          Dilaporkan
+                        </Text>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleReport(item.id)}
+                        style={({ pressed }) => [
+                          styles.reportButton,
+                          { opacity: pressed ? 0.6 : 1 },
+                        ]}
+                      >
+                        <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
+                      </Pressable>
                     )}
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <TextInput
-                        value={replyText}
-                        onChangeText={setReplyText}
-                        placeholder={`Balas ${item.user_name}...`}
-                        placeholderTextColor={colors.placeholder}
-                        multiline
-                        maxLength={250}
-                        style={[styles.textInput, { color: colors.inputText }]}
-                        autoFocus
+                  </View>
+
+                  <Text style={[styles.commentContentText, { color: colors.text }]}>
+                    {item.content}
+                  </Text>
+
+                  {/* Comment Footer (Like & Reply buttons) */}
+                  <View style={[styles.commentFooterRow, { gap: 12 }]}>
+                    <Pressable
+                      onPress={() => handleLike(item.id)}
+                      style={({ pressed }) => [
+                        styles.likeButton,
+                        { opacity: pressed ? 0.8 : 1 },
+                      ]}
+                    >
+                      <Ionicons
+                        name={item.liked_by_me ? "heart" : "heart-outline"}
+                        size={16}
+                        color={item.liked_by_me ? colors.accent : colors.subtext}
                       />
-                      <View style={styles.inputFooter}>
-                        <Text
+                      <Text
+                        style={[
+                          styles.likeCountText,
+                          { color: item.liked_by_me ? colors.accent : colors.subtext },
+                        ]}
+                      >
+                        {item.likes_count}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => handleReplyPress(item)}
+                      style={({ pressed }) => [
+                        styles.replyButton,
+                        { opacity: pressed ? 0.8 : 1 },
+                      ]}
+                    >
+                      <Ionicons
+                        name="chatbubble-outline"
+                        size={15}
+                        color={colors.subtext}
+                      />
+                      <Text style={[styles.replyButtonText, { color: colors.subtext }]}>
+                        Balas
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Toggle replies button if replies exist */}
+                {item.replies && item.replies.length > 0 && (
+                  <Pressable
+                    onPress={() => {
+                      setExpandedCommentIds((prev) => ({
+                        ...prev,
+                        [item.id]: !prev[item.id],
+                      }));
+                    }}
+                    style={styles.toggleRepliesButton}
+                  >
+                    <Ionicons
+                      name={expandedCommentIds[item.id] ? "chevron-up" : "chevron-down"}
+                      size={16}
+                      color={colors.accent}
+                    />
+                    <Text style={[styles.toggleRepliesText, { color: colors.accent }]}>
+                      {expandedCommentIds[item.id]
+                        ? "Sembunyikan balasan"
+                        : `Lihat ${item.replies.length} balasan`}
+                    </Text>
+                  </Pressable>
+                )}
+
+                {/* Render Nested Replies container if expanded OR if the reply form is active for this comment */}
+                {(expandedCommentIds[item.id] || isFormActiveForThisComment) && (
+                  <View style={[styles.repliesListContainer, { borderLeftColor: colors.border }]}>
+                    {expandedCommentIds[item.id] &&
+                      item.replies &&
+                      item.replies.map((reply) => (
+                        <View
+                          key={`reply-${reply.id}`}
                           style={[
-                            styles.charCounter,
+                            styles.replyItem,
                             {
-                              color: replyText.length > 200
-                                ? colors.danger
-                                : replyText.length > 180
-                                ? "#FFA500"
-                                : colors.subtext,
+                              backgroundColor: colors.card,
+                              borderColor: colors.border,
                             },
                           ]}
                         >
-                          {replyText.length}/200
-                        </Text>
-                        <View style={{ flexDirection: "row", gap: 8 }}>
-                          <Pressable
-                            onPress={() => setActiveReplyId(null)}
-                            style={styles.cancelReplyButton}
-                          >
-                            <Text style={[styles.cancelReplyText, { color: colors.subtext }]}>Batal</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => handlePostReply(item.id)}
-                            disabled={!replyText.trim() || replyText.length > 200 || submittingReply}
-                            style={({ pressed }) => [
-                              styles.sendButton,
-                              {
-                                backgroundColor:
-                                  !replyText.trim() || replyText.length > 200
-                                    ? colors.chip
-                                    : colors.accent,
-                                opacity: pressed ? 0.8 : 1,
-                              },
-                            ]}
-                          >
-                            {submittingReply ? (
-                              <ActivityIndicator size="small" color="#FFF" />
+                          <View style={styles.commentHeader}>
+                            <View style={styles.commentUserRow}>
+                              <View
+                                style={[
+                                  styles.avatarCircleSmall,
+                                  { backgroundColor: getAvatarBgColor(reply.user_name) },
+                                ]}
+                              >
+                                <Text style={styles.avatarTextSmall}>
+                                  {getInitials(reply.user_name)}
+                                </Text>
+                              </View>
+                              <View style={{ gap: 2 }}>
+                                <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+                                  <Text style={[styles.userNameText, { color: colors.text }]}>
+                                    {reply.user_name}
+                                  </Text>
+                                  {reply.reply_to_username && (
+                                    <Text style={{ fontSize: 12, fontWeight: "700", color: colors.accent }}>
+                                      → @{reply.reply_to_username}
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text style={[styles.timeText, { color: colors.subtext }]}>
+                                  {formatRelativeTime(reply.created_at)}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Report Action Button */}
+                            {reply.status === "reported" ? (
+                              <View style={styles.reportedIndicator}>
+                                <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
+                                <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
+                                  Dilaporkan
+                                </Text>
+                              </View>
                             ) : (
-                              <Text style={styles.sendButtonText}>Balas</Text>
+                              <Pressable
+                                onPress={() => handleReport(reply.id)}
+                                style={({ pressed }) => [
+                                  styles.reportButton,
+                                  { opacity: pressed ? 0.6 : 1 },
+                                ]}
+                              >
+                                <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
+                              </Pressable>
                             )}
-                          </Pressable>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              )}
-
-              {/* Render Nested Replies */}
-              {expandedCommentIds[item.id] && item.replies && item.replies.length > 0 && (
-                <View style={[styles.repliesListContainer, { borderLeftColor: colors.border }]}>
-                  {item.replies.map((reply) => (
-                    <View
-                      key={`reply-${reply.id}`}
-                      style={[
-                        styles.replyItem,
-                        {
-                          backgroundColor: colors.card,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                    >
-                      <View style={styles.commentHeader}>
-                        <View style={styles.commentUserRow}>
-                          <View
-                            style={[
-                              styles.avatarCircleSmall,
-                              { backgroundColor: getAvatarBgColor(reply.user_name) },
-                            ]}
-                          >
-                            <Text style={styles.avatarTextSmall}>
-                              {getInitials(reply.user_name)}
-                            </Text>
                           </View>
-                          <View style={{ gap: 2 }}>
-                            <Text style={[styles.userNameText, { color: colors.text }]}>
-                              {reply.user_name}
-                            </Text>
-                            <Text style={[styles.timeText, { color: colors.subtext }]}>
-                              {formatRelativeTime(reply.created_at)}
-                            </Text>
-                          </View>
-                        </View>
 
-                        {/* Report Action Button */}
-                        {reply.status === "reported" ? (
-                          <View style={styles.reportedIndicator}>
-                            <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
-                            <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
-                              Dilaporkan
-                            </Text>
-                          </View>
-                        ) : (
-                          <Pressable
-                            onPress={() => handleReport(reply.id)}
-                            style={({ pressed }) => [
-                              styles.reportButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
-                          </Pressable>
-                        )}
-                      </View>
-
-                      <Text style={[styles.commentContentText, { color: colors.text }]}>
-                        {reply.content}
-                      </Text>
-
-                      {/* Reply Footer (Like counts) */}
-                      <View style={styles.commentFooterRow}>
-                        <Pressable
-                          onPress={() => handleLike(reply.id)}
-                          style={({ pressed }) => [
-                            styles.likeButton,
-                            { opacity: pressed ? 0.8 : 1 },
-                          ]}
-                        >
-                          <Ionicons
-                            name={reply.liked_by_me ? "heart" : "heart-outline"}
-                            size={16}
-                            color={reply.liked_by_me ? colors.accent : colors.subtext}
-                          />
-                          <Text
-                            style={[
-                              styles.likeCountText,
-                              { color: reply.liked_by_me ? colors.accent : colors.subtext },
-                            ]}
-                          >
-                            {reply.likes_count}
+                          <Text style={[styles.commentContentText, { color: colors.text }]}>
+                            {reply.content}
                           </Text>
-                        </Pressable>
+
+                          {/* Reply Footer (Like & Reply buttons) */}
+                          <View style={[styles.commentFooterRow, { gap: 12 }]}>
+                            <Pressable
+                              onPress={() => handleLike(reply.id)}
+                              style={({ pressed }) => [
+                                styles.likeButton,
+                                { opacity: pressed ? 0.8 : 1 },
+                              ]}
+                            >
+                              <Ionicons
+                                name={reply.liked_by_me ? "heart" : "heart-outline"}
+                                size={16}
+                                color={reply.liked_by_me ? colors.accent : colors.subtext}
+                              />
+                              <Text
+                                style={[
+                                  styles.likeCountText,
+                                  { color: reply.liked_by_me ? colors.accent : colors.subtext },
+                                ]}
+                              >
+                                {reply.likes_count}
+                              </Text>
+                            </Pressable>
+
+                            <Pressable
+                              onPress={() => handleReplyPress(reply)}
+                              style={({ pressed }) => [
+                                styles.replyButton,
+                                { opacity: pressed ? 0.8 : 1 },
+                              ]}
+                            >
+                              <Ionicons
+                                name="chatbubble-outline"
+                                size={15}
+                                color={colors.subtext}
+                              />
+                              <Text style={[styles.replyButtonText, { color: colors.subtext }]}>
+                                Balas
+                              </Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      ))}
+
+                    {/* Inline Reply Form at the bottom of the list */}
+                    {isFormActiveForThisComment && (
+                      <View
+                        style={[
+                          styles.replyFormContainer,
+                          {
+                            backgroundColor: colors.card,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <View style={styles.inputInnerRow}>
+                          {profile && (
+                            <View
+                              style={[
+                                styles.avatarCircleSmall,
+                                { backgroundColor: getAvatarBgColor(profile.name) },
+                              ]}
+                            >
+                              <Text style={styles.avatarTextSmall}>{getInitials(profile.name)}</Text>
+                            </View>
+                          )}
+                          <View style={{ flex: 1, gap: 4 }}>
+                            <TextInput
+                              value={replyText}
+                              onChangeText={setReplyText}
+                              placeholder="Tulis balasan..."
+                              placeholderTextColor={colors.placeholder}
+                              multiline
+                              maxLength={250}
+                              style={[styles.textInput, { color: colors.inputText }]}
+                              autoFocus
+                            />
+                            <View style={styles.inputFooter}>
+                              <Text
+                                style={[
+                                  styles.charCounter,
+                                  {
+                                    color: replyCharCount > 200
+                                      ? colors.danger
+                                      : replyCharCount > 180
+                                      ? "#FFA500"
+                                      : colors.subtext,
+                                  },
+                                ]}
+                              >
+                                {replyCharCount}/200
+                              </Text>
+                              <View style={{ flexDirection: "row", gap: 8 }}>
+                                <Pressable
+                                  onPress={() => setActiveReplyId(null)}
+                                  style={styles.cancelReplyButton}
+                                >
+                                  <Text style={[styles.cancelReplyText, { color: colors.subtext }]}>Batal</Text>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => handlePostReply(item.id)}
+                                  disabled={!replyText.trim() || replyCharCount > 200 || submittingReply}
+                                  style={({ pressed }) => [
+                                    styles.sendButton,
+                                    {
+                                      backgroundColor:
+                                        !replyText.trim() || replyCharCount > 200
+                                          ? colors.chip
+                                          : colors.accent,
+                                      opacity: pressed ? 0.8 : 1,
+                                    },
+                                  ]}
+                                >
+                                  {submittingReply ? (
+                                    <ActivityIndicator size="small" color="#FFF" />
+                                  ) : (
+                                    <Text style={styles.sendButtonText}>Balas</Text>
+                                  )}
+                                </Pressable>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          ))}
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
 
           {/* Load More Button */}
           {page < lastPage && (

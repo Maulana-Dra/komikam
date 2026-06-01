@@ -24,7 +24,8 @@ class CommentController extends Controller
             'replies' => function ($query) {
                 $query->withCount('likes')->where('status', '!=', 'deleted');
             },
-            'replies.user'
+            'replies.user',
+            'replies.replyToUser'
         ])
         ->withCount('likes')
         ->whereNull('parent_id')
@@ -61,6 +62,8 @@ class CommentController extends Controller
                     'user_id' => $reply->user_id,
                     'user_name' => $reply->user ? $reply->user->name : 'User Komikam',
                     'parent_id' => $reply->parent_id,
+                    'reply_to_user_id' => $reply->reply_to_user_id,
+                    'reply_to_username' => $reply->replyToUser ? $reply->replyToUser->name : null,
                     'manga_id' => $reply->manga_id,
                     'content' => $reply->content,
                     'status' => $reply->status,
@@ -76,6 +79,8 @@ class CommentController extends Controller
                 'user_id' => $comment->user_id,
                 'user_name' => $comment->user ? $comment->user->name : 'User Komikam',
                 'parent_id' => $comment->parent_id,
+                'reply_to_user_id' => null,
+                'reply_to_username' => null,
                 'manga_id' => $comment->manga_id,
                 'content' => $comment->content,
                 'status' => $comment->status,
@@ -119,6 +124,8 @@ class CommentController extends Controller
                 'user_id' => $comment->user_id,
                 'user_name' => $comment->user->name,
                 'parent_id' => $comment->parent_id,
+                'reply_to_user_id' => null,
+                'reply_to_username' => null,
                 'manga_id' => $comment->manga_id,
                 'content' => $comment->content,
                 'status' => $comment->status,
@@ -136,29 +143,53 @@ class CommentController extends Controller
      */
     public function storeReply(Request $request, int $commentId): JsonResponse
     {
-        $parent = Comment::where('status', '!=', 'deleted')->find($commentId);
-        if (!$parent) {
-            return response()->json(['message' => 'Komentar utama tidak ditemukan.'], 404);
+        $comment = Comment::where('status', '!=', 'deleted')->find($commentId);
+        if (!$comment) {
+            return response()->json(['message' => 'Komentar tidak ditemukan.'], 404);
         }
 
-        // Batasi kedalaman reply hanya 1 level: parent comment must have parent_id = null
-        if ($parent->parent_id !== null) {
-            return response()->json(['message' => 'Tidak dapat membalas sebuah balasan komentar.'], 400);
-        }
+        // Determine root parent ID (if target comment is a reply, use its parent_id, otherwise use its id)
+        $rootParentId = $comment->parent_id ?: $comment->id;
 
         $data = $request->validate([
-            'content' => ['required', 'string', 'min:1', 'max:200'],
+            'content' => ['required', 'string', 'min:1'],
+            'reply_to_user_id' => ['nullable', 'exists:users,id'],
         ]);
+
+        $replyToUserId = $data['reply_to_user_id'] ?? ($comment->parent_id ? $comment->user_id : null);
+        $content = $data['content'];
+
+        // Validate length of reply content, ignoring the '@username ' mention prefix
+        $validationLength = mb_strlen($content);
+        if ($replyToUserId) {
+            $replyToUser = \App\Models\User::find($replyToUserId);
+            if ($replyToUser) {
+                $prefix = '@' . $replyToUser->name . ' ';
+                if (str_starts_with($content, $prefix)) {
+                    $validationLength = mb_strlen(substr($content, strlen($prefix)));
+                }
+            }
+        }
+
+        if ($validationLength > 200) {
+            return response()->json([
+                'message' => 'Balasan tidak boleh lebih dari 200 karakter.',
+                'errors' => [
+                    'content' => ['Balasan tidak boleh lebih dari 200 karakter.']
+                ]
+            ], 422);
+        }
 
         $reply = Comment::create([
             'user_id' => $request->user()->id,
-            'parent_id' => $parent->id,
-            'manga_id' => $parent->manga_id,
-            'content' => $data['content'],
+            'parent_id' => $rootParentId,
+            'reply_to_user_id' => $replyToUserId,
+            'manga_id' => $comment->manga_id,
+            'content' => $content,
             'status' => 'active',
         ]);
 
-        $reply->load('user');
+        $reply->load(['user', 'replyToUser']);
 
         return response()->json([
             'message' => 'Balasan berhasil ditambahkan.',
@@ -167,6 +198,8 @@ class CommentController extends Controller
                 'user_id' => $reply->user_id,
                 'user_name' => $reply->user->name,
                 'parent_id' => $reply->parent_id,
+                'reply_to_user_id' => $reply->reply_to_user_id,
+                'reply_to_username' => $reply->replyToUser ? $reply->replyToUser->name : null,
                 'manga_id' => $reply->manga_id,
                 'content' => $reply->content,
                 'status' => $reply->status,

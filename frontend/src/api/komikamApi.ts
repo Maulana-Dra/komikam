@@ -244,6 +244,8 @@ export type ApiComment = {
   likes_count: number;
   liked_by_me: boolean;
   parent_id?: number | null;
+  reply_to_user_id?: number | null;
+  reply_to_username?: string | null;
   replies?: ApiComment[];
   created_at: string;
   updated_at: string;
@@ -280,8 +282,12 @@ export async function apiPostComment(
 export async function apiPostReply(
   commentId: number,
   content: string,
+  replyToUserId?: number,
 ): Promise<{ message: string; comment: ApiComment }> {
-  return request("POST", `/comments/${commentId}/reply`, { content });
+  return request("POST", `/comments/${commentId}/reply`, {
+    content,
+    reply_to_user_id: replyToUserId,
+  });
 }
 
 export async function apiLikeComment(

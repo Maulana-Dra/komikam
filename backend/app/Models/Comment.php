@@ -11,6 +11,7 @@ class Comment extends Model
     protected $fillable = [
         'user_id',
         'parent_id',
+        'reply_to_user_id',
         'manga_id',
         'content',
         'status',
@@ -19,6 +20,11 @@ class Comment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function replyToUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reply_to_user_id');
     }
 
     public function likes(): HasMany
