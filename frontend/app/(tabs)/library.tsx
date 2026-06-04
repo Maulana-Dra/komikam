@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Pressable, useWindowDimensions } from 'react-native';
+import { View, Pressable, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { Text } from '@/components/ui/app-text';
 import { useAppTheme } from '@/src/theme/ThemeContext';
 import { BookmarksTab } from '@/src/components/library/BookmarksTab';
@@ -10,7 +11,34 @@ export default function LibraryScreen() {
   const { resolved } = useAppTheme();
   const isDark = resolved === 'dark';
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<'bookmarks' | 'history'>('bookmarks');
+
+  React.useEffect(() => {
+    if (params.tab === 'history') {
+      setActiveTab('history');
+    } else if (params.tab === 'bookmarks') {
+      setActiveTab('bookmarks');
+    }
+  }, [params.tab]);
+  
+  // Animation states
+  const [containerWidth, setContainerWidth] = useState(0);
+  const tabAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.spring(tabAnim, {
+      toValue: activeTab === 'bookmarks' ? 0 : 1,
+      useNativeDriver: true,
+      tension: 60,
+      friction: 9,
+    }).start();
+  }, [activeTab, tabAnim]);
+
+  const translateX = tabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, containerWidth > 0 ? (containerWidth - 8) / 2 : 0],
+  });
 
   const colors = React.useMemo(
     () => ({
@@ -33,22 +61,40 @@ export default function LibraryScreen() {
         </Text>
         
         {/* Segmented Control */}
-        <View style={{ 
-          flexDirection: 'row', 
-          backgroundColor: colors.card, 
-          borderRadius: 12,
-          padding: 4,
-          borderWidth: 1,
-          borderColor: colors.border
-        }}>
+        <View 
+          onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+          style={{ 
+            flexDirection: 'row', 
+            backgroundColor: colors.card, 
+            borderRadius: 12,
+            padding: 4,
+            borderWidth: 1,
+            borderColor: colors.border,
+            position: 'relative',
+          }}
+        >
+          {/* Animated Background Pill */}
+          {containerWidth > 0 && (
+            <Animated.View style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 4,
+              width: (containerWidth - 8) / 2,
+              backgroundColor: colors.primary,
+              borderRadius: 8,
+              transform: [{ translateX }],
+            }} />
+          )}
+
           <Pressable
             onPress={() => setActiveTab('bookmarks')}
             style={{
               flex: 1,
               paddingVertical: 10,
               alignItems: 'center',
-              backgroundColor: activeTab === 'bookmarks' ? colors.primary : 'transparent',
               borderRadius: 8,
+              zIndex: 1,
             }}
           >
             <Text style={{ 
@@ -58,14 +104,15 @@ export default function LibraryScreen() {
               Bookmarks
             </Text>
           </Pressable>
+          
           <Pressable
             onPress={() => setActiveTab('history')}
             style={{
               flex: 1,
               paddingVertical: 10,
               alignItems: 'center',
-              backgroundColor: activeTab === 'history' ? colors.primary : 'transparent',
               borderRadius: 8,
+              zIndex: 1,
             }}
           >
             <Text style={{ 

@@ -194,6 +194,16 @@ export default function HomeScreen() {
   const [recentLoading, setRecentLoading] = React.useState<boolean>(true);
   const [isLoggedIn, setIsLoggedIn] = React.useState<boolean>(false);
 
+  const displayRecent = React.useMemo(() => {
+    if (recent.length > 7) {
+      return [
+        ...recent.slice(0, 7),
+        { isMoreCard: true, mangaId: "more", chapterId: "more" } as any,
+      ];
+    }
+    return recent;
+  }, [recent]);
+
   const [searchState, setSearchState] = React.useState<{
     items: ShngmManga[];
     loading: boolean;
@@ -272,7 +282,7 @@ export default function HomeScreen() {
   const loadRecent = React.useCallback(async () => {
     try {
       setRecentLoading(true);
-      const items = await getAllHistory(6);
+      const items = await getAllHistory(8);
       
       const populated = await Promise.all(
         items.map(async (h) => {
@@ -1083,14 +1093,13 @@ export default function HomeScreen() {
 
       {/* 3. Continue reading */}
       {!isSearching && isLoggedIn && (recentLoading || recent.length > 0) ? (
-        <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", marginBottom: 14 }}>
+        <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", marginBottom: 14, paddingHorizontal: contentPadding }}>
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
               marginBottom: 10,
-              paddingHorizontal: contentPadding,
             }}
           >
             <Text
@@ -1102,7 +1111,7 @@ export default function HomeScreen() {
             >
               Lanjutkan Bacaan
             </Text>
-            <Pressable onPress={() => router.push("/library")}>
+            <Pressable onPress={() => router.push({ pathname: "/library", params: { tab: "history" } })}>
               <Text style={{ color: colors.subtext, fontWeight: "800" }}>
                 Lihat semua
               </Text>
@@ -1110,7 +1119,7 @@ export default function HomeScreen() {
           </View>
 
           {recentLoading ? (
-            <View style={{ flexDirection: "row", gap: 12, paddingHorizontal: contentPadding }}>
+            <View style={{ flexDirection: "row", gap: 12 }}>
               {Array.from({ length: 3 }).map((_, idx) => (
                 <View
                   key={`recent-loading-${idx}`}
@@ -1128,13 +1137,62 @@ export default function HomeScreen() {
             </View>
           ) : (
             <FlatList
-              data={recent}
+              data={displayRecent}
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(it) => `${it.mangaId}:${it.chapterId}`}
-              contentContainerStyle={{ gap: 12, paddingLeft: contentPadding, paddingRight: contentPadding }}
-              ListFooterComponent={<View style={{ width: contentPadding }} />}
+              keyExtractor={(it) => (it as any).isMoreCard ? "more-card" : `${it.mangaId}:${it.chapterId}`}
+              contentContainerStyle={{ gap: 12 }}
               renderItem={({ item }) => {
+                if ((item as any).isMoreCard) {
+                  return (
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/library",
+                          params: { tab: "history" },
+                        })
+                      }
+                      style={({ pressed }) => ({
+                        width: 100,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        alignSelf: "center",
+                        opacity: pressed ? 0.7 : 1,
+                      })}
+                    >
+                      <View
+                        style={{
+                          width: 50,
+                          height: 50,
+                          borderRadius: 25,
+                          backgroundColor: colors.chip,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          borderWidth: 1,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Ionicons
+                          name="arrow-forward"
+                          size={22}
+                          color={colors.text}
+                        />
+                      </View>
+                      <Text
+                        style={{
+                          fontWeight: "900",
+                          color: colors.text,
+                          fontSize: 13,
+                          textAlign: "center",
+                        }}
+                      >
+                        Lihat Lainnya
+                      </Text>
+                    </Pressable>
+                  );
+                }
+
                 const title = item.mangaTitle || "Unknown";
                 const page = item.pageIndex + 1;
                 const total = item.totalPages || 0;

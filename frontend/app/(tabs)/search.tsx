@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -866,7 +867,7 @@ export default function SearchScreen() {
             paddingHorizontal: 12,
             height: 44, // Fixed height to prevent vertical stretching
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: isSearchFocused ? colors.primary : colors.border,
           }}
         >
           <Ionicons name="search" size={18} color={colors.subtext} />
@@ -887,6 +888,10 @@ export default function SearchScreen() {
               marginLeft: 10,
               color: colors.text,
               fontSize: 15,
+              ...Platform.select({
+                web: { outlineStyle: "none" as any },
+                default: {},
+              }),
             }}
           />
           {searchQuery.length > 0 && (

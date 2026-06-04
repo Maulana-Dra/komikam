@@ -449,21 +449,6 @@ export function HistoryTab() {
                           Ch {item.chapterNumber}
                         </Text>
                       </View>
-
-                      <View
-                        style={{
-                          backgroundColor: colors.chip,
-                          borderWidth: 1,
-                          borderColor: colors.border,
-                          paddingVertical: 6,
-                          paddingHorizontal: 10,
-                          borderRadius: 999,
-                        }}
-                      >
-                        <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                          Hal {item.pageIndex + 1}/{item.totalPages}
-                        </Text>
-                      </View>
                     </View>
                   </Pressable>
 
