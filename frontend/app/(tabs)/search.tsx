@@ -682,17 +682,8 @@ export default function SearchScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // stable toggle helpers
-  const makeToggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) =>
-    useCallback(
-      (v: string) =>
-        setter((prev) =>
-          prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v],
-        ),
-      [],
-    );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const toggleGenre = useCallback(
     (v: string) =>
       setSelectedGenres((p) =>
@@ -700,7 +691,6 @@ export default function SearchScreen() {
       ),
     [],
   );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const toggleType = useCallback(
     (v: string) =>
       setSelectedTypes((p) =>
@@ -1304,31 +1294,6 @@ export default function SearchScreen() {
           />
         </View>
       </View>
-      
-      {/* Floating Refresh Button */}
-      <Pressable
-        onPress={onRefresh}
-        style={({ pressed }) => ({
-          position: "absolute",
-          bottom: 24, // pastikan di atas bottom bar
-          right: 24,
-          backgroundColor: colors.primary,
-          width: 48,
-          height: 48,
-          borderRadius: 24,
-          alignItems: "center",
-          justifyContent: "center",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 6,
-          opacity: pressed || refreshing ? 0.8 : 1,
-          zIndex: 100,
-        })}
-      >
-        <Ionicons name="refresh" size={24} color={isDark ? "#111" : "#fff"} />
-      </Pressable>
     </View>
   );
 }
