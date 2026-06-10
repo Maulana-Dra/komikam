@@ -77,10 +77,7 @@ function isOfflineError(err: unknown): boolean {
 }
 
 function getFlagEmoji(countryId: string) {
-  const map: Record<string, string> = {
-    kr: "🇰🇷", jp: "🇯🇵", cn: "🇨🇳", id: "🇮🇩", gb: "🇬🇧", us: "🇺🇸",
-  };
-  return map[(countryId || "").toLowerCase()] || countryId?.toUpperCase() || "";
+  return (countryId || "").toUpperCase();
 }
 
 function parseRelativeTime(dateStr: string) {
@@ -103,8 +100,8 @@ function parseRelativeTime(dateStr: string) {
 }
 
 function getStatusLabel(status: number) {
-  if (status === 1) return "Ongoing";
-  if (status === 2) return "Completed";
+  if (status === 1) return "Berlangsung";
+  if (status === 2) return "Selesai";
   return "";
 }
 
@@ -204,11 +201,23 @@ export default function HomeScreen() {
     return recent;
   }, [recent]);
 
-  const [searchState, setSearchState] = React.useState<{
+  type SearchFeedState = {
     items: ShngmManga[];
+    page: number;
+    totalPage: number;
     loading: boolean;
+    loadingMore: boolean;
     error: string | null;
-  }>({ items: [], loading: false, error: null });
+  };
+
+  const [searchFeed, setSearchFeed] = React.useState<SearchFeedState>({
+    items: [],
+    page: 1,
+    totalPage: 1,
+    loading: false,
+    loadingMore: false,
+    error: null,
+  });
   const [searchNonce, setSearchNonce] = React.useState(0);
 
   const [offline, setOffline] = React.useState(false);
@@ -271,8 +280,7 @@ export default function HomeScreen() {
     ],
   });
 
-  const USE_SERVER_SEARCH = process.env.EXPO_PUBLIC_SERVER_SEARCH === "1";
-  const SERVER_SEARCH_MIN = 2;
+
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(queryInput), 300);
@@ -327,7 +335,7 @@ export default function HomeScreen() {
         });
         setOffline(false);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
+        const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
         if (isOfflineError(e)) setOffline(true);
         setRec((s) => ({ ...s, loading: false, error: msg }));
       }
@@ -373,7 +381,7 @@ export default function HomeScreen() {
       }));
       setOffline(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+      const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
       if (isOfflineError(e)) setOffline(true);
       setFeeds((f) => ({
         ...f,
@@ -428,7 +436,7 @@ export default function HomeScreen() {
       // recommended juga ikut update saat refresh
       await loadRecommended("force");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+      const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
       if (isOfflineError(e)) setOffline(true);
       setFeeds((f) => ({
         ...f,
@@ -438,7 +446,48 @@ export default function HomeScreen() {
   }, [active, loadRecommended]);
 
   const loadMore = React.useCallback(async () => {
-    if (debouncedQuery.trim().length > 0) return; // saat search jangan pagination
+    const q = debouncedQuery.trim();
+    if (q.length > 0) {
+      let nextPage = 0;
+      setSearchFeed((s) => {
+        if (s.loadingMore) return s;
+        if (s.page >= s.totalPage) return s;
+        nextPage = s.page + 1;
+        return { ...s, loadingMore: true };
+      });
+
+      if (nextPage === 0) return;
+
+      try {
+        const res = await getMangaListByType({
+          type: active,
+          page: nextPage,
+          pageSize: PAGE_SIZE,
+          isUpdate: true,
+          sort: "latest",
+          sortOrder: "desc",
+          query: q,
+        });
+
+        setSearchFeed((s) => {
+          const merged = mergeUnique(s.items, res.data);
+          return {
+            ...s,
+            items: merged,
+            page: res.meta.page,
+            totalPage: res.meta.total_page,
+            loadingMore: false,
+            error: null,
+          };
+        });
+        setOffline(false);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
+        if (isOfflineError(e)) setOffline(true);
+        setSearchFeed((s) => ({ ...s, loadingMore: false, error: msg }));
+      }
+      return;
+    }
 
     let nextPage = 0;
 
@@ -478,7 +527,7 @@ export default function HomeScreen() {
       });
       setOffline(false);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+      const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
       if (isOfflineError(e)) setOffline(true);
       setFeeds((f) => {
         const cur = f[active];
@@ -519,22 +568,10 @@ export default function HomeScreen() {
 
   const activeFeed = feeds[active];
 
-  const clientFiltered = React.useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return activeFeed.items;
 
-    return activeFeed.items.filter((m) => {
-      const t = (m.title ?? "").toLowerCase();
-      const alt = (m.alternative_title ?? "").toLowerCase();
-      return t.includes(q) || alt.includes(q);
-    });
-  }, [activeFeed.items, debouncedQuery]);
 
-  const useServerSearch =
-    USE_SERVER_SEARCH && debouncedQuery.trim().length >= SERVER_SEARCH_MIN;
-  const filtered =
-    useServerSearch && !searchState.error ? searchState.items : clientFiltered;
   const isSearching = debouncedQuery.trim().length > 0;
+  const filtered = isSearching ? searchFeed.items : activeFeed.items;
   const hero = filtered.slice(0, 3);
 
   const numColumns = isGrid ? (isDesktop ? (width >= 1024 ? 6 : 4) : 2) : 1;
@@ -560,8 +597,8 @@ export default function HomeScreen() {
       setBanner("Offline. Menampilkan data tersimpan.");
     } else if (activeFeed.error && activeFeed.items.length > 0) {
       setBanner(activeFeed.error);
-    } else if (useServerSearch && searchState.error) {
-      setBanner(searchState.error);
+    } else if (isSearching && searchFeed.error) {
+      setBanner(searchFeed.error);
     } else if (!activeFeed.error) {
       setBanner(null);
     }
@@ -569,19 +606,27 @@ export default function HomeScreen() {
     offline,
     activeFeed.error,
     activeFeed.items.length,
-    searchState.error,
-    useServerSearch,
+    searchFeed.error,
+    isSearching,
     active,
   ]);
 
   React.useEffect(() => {
-    if (!useServerSearch) {
-      setSearchState({ items: [], loading: false, error: null });
+    const q = debouncedQuery.trim();
+    if (q.length === 0) {
+      setSearchFeed({
+        items: [],
+        page: 1,
+        totalPage: 1,
+        loading: false,
+        loadingMore: false,
+        error: null,
+      });
       return;
     }
 
     let cancelled = false;
-    setSearchState((s) => ({ ...s, loading: true, error: null }));
+    setSearchFeed((s) => ({ ...s, loading: true, error: null, items: [] }));
 
     (async () => {
       try {
@@ -593,26 +638,40 @@ export default function HomeScreen() {
             isUpdate: true,
             sort: "latest",
             sortOrder: "desc",
-            query: debouncedQuery.trim(),
+            query: q,
           },
           { cacheMode: "no-cache" },
         );
 
         if (cancelled) return;
-        setSearchState({ items: res.data, loading: false, error: null });
+        setSearchFeed({
+          items: res.data,
+          page: res.meta.page,
+          totalPage: res.meta.total_page,
+          loading: false,
+          loadingMore: false,
+          error: null,
+        });
         setOffline(false);
       } catch (e) {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "Unknown error";
+        const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
         if (isOfflineError(e)) setOffline(true);
-        setSearchState((s) => ({ ...s, loading: false, error: msg }));
+        setSearchFeed({
+          items: [],
+          page: 1,
+          totalPage: 1,
+          loading: false,
+          loadingMore: false,
+          error: msg,
+        });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [useServerSearch, debouncedQuery, active, searchNonce]);
+  }, [debouncedQuery, active, searchNonce]);
 
   // Helper — taruh di dalam komponen, sebelum JSX
   const handleToggleLayout = (toGrid: boolean) => {
@@ -868,7 +927,7 @@ export default function HomeScreen() {
           />
         </View>
         <Text style={{ fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" }}>
-          {offline ? "Kamu Sedang Offline" : `Gagal load ${active}`}
+          {offline ? "Kamu Sedang Offline" : `Gagal memuat`}
         </Text>
         <Text style={{ fontSize: 16, color: colors.subtext, textAlign: "center", paddingHorizontal: 20 }}>
           {offline ? "Cek koneksi internetmu lalu coba muat ulang halaman ini." : activeFeed.error}
@@ -891,7 +950,7 @@ export default function HomeScreen() {
           })}
         >
           <Text style={{ color: colors.bg, fontWeight: "900", fontSize: 16 }}>
-            {offline ? "Coba Lagi" : "Retry"}
+            {offline ? "Coba Lagi" : "Coba Lagi"}
           </Text>
         </Pressable>
       </View>
@@ -995,7 +1054,7 @@ export default function HomeScreen() {
             >
               <IconSymbol name="wifi.slash" size={14} color={colors.subtext} />
               <Text style={{ color: colors.subtext, fontWeight: "800" }}>
-                Offline
+                Tidak Ada Koneksi
               </Text>
             </Animated.View>
           ) : null}
@@ -1039,7 +1098,7 @@ export default function HomeScreen() {
               <Pressable
                 onPress={() => {
                   setBanner(null);
-                  if (useServerSearch && isSearching) {
+                  if (isSearching) {
                     setSearchNonce((n) => n + 1);
                   } else {
                     void refreshActive();
@@ -1053,7 +1112,7 @@ export default function HomeScreen() {
                 }}
               >
                 <Text style={{ color: colors.activePillText, fontWeight: "800" }}>
-                  Retry
+                  Coba Lagi
                 </Text>
               </Pressable>
               <Pressable
@@ -1211,6 +1270,7 @@ export default function HomeScreen() {
                             chapterId: item.chapterId,
                             mangaTitle: title,
                             coverUrl: item.coverUrl ?? "",
+                            mangaId: item.mangaId,
                           },
                         })
                       }
@@ -1310,7 +1370,7 @@ export default function HomeScreen() {
                 marginBottom: 10,
               }}
             >
-              Recommended
+              Rekomendasi
             </Text>
             {/* 🔹 FILTER BUTTON */}
             <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
@@ -1437,7 +1497,7 @@ export default function HomeScreen() {
           >
             {isSearching
               ? "Hasil Pencarian"
-              : `Latest Updates (${active === "project" ? "Project" : "Mirror"})`}
+              : `Update Terbaru (${active === "project" ? "Project" : "Mirror"})`}
           </Text>
 
           {/* ROW: LEFT (Project/Mirror) + RIGHT (View Toggle) */}
@@ -1549,7 +1609,7 @@ export default function HomeScreen() {
         onEndReachedThreshold={0.6}
         onEndReached={() => void loadMore()}
         ListFooterComponent={
-          activeFeed.loadingMore ? (
+          (isSearching ? searchFeed.loadingMore : activeFeed.loadingMore) ? (
             <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingVertical: 16 }}>
               <ActivityIndicator />
             </View>
@@ -1558,7 +1618,7 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={{ width: "100%", maxWidth: 1600, alignSelf: "center", paddingHorizontal: contentPadding }}>
             <View style={{ paddingVertical: 32, alignItems: "center", gap: 8 }}>
-              {useServerSearch && searchState.loading ? (
+              {isSearching && searchFeed.loading ? (
                 <View style={{ paddingTop: 16 }}>
                   {isGrid ? <MangaGridSkeleton columns={numColumns} /> : <MangaListSkeleton />}
                 </View>
@@ -1651,7 +1711,7 @@ export default function HomeScreen() {
                           ) : null}
                           {item.country_id ? (
                             <View style={{ position: "absolute", bottom: 4, right: 4, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
-                              <Text style={{ fontSize: 9 }}>{getFlagEmoji(item.country_id)}</Text>
+                              <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "700" }}>{getFlagEmoji(item.country_id)}</Text>
                               <Text style={{ color: "#FFF", fontSize: 8, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
                             </View>
                           ) : null}
@@ -1769,7 +1829,7 @@ export default function HomeScreen() {
                       ) : null}
                       {item.country_id ? (
                         <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
-                          <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
+                          <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFlagEmoji(item.country_id)}</Text>
                           <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
                         </View>
                       ) : null}

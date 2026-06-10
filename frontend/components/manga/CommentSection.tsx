@@ -159,7 +159,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       if (Platform.OS === "web") {
         window.alert(msg);
       } else {
-        Alert.alert("Error", msg);
+        Alert.alert("Terjadi Kesalahan", msg);
       }
     } finally {
       setSubmitting(false);
@@ -206,7 +206,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       if (Platform.OS === "web") {
         window.alert("Balasan tidak boleh lebih dari 200 karakter.");
       } else {
-        Alert.alert("Error", "Balasan tidak boleh lebih dari 200 karakter.");
+        Alert.alert("Terjadi Kesalahan", "Balasan tidak boleh lebih dari 200 karakter.");
       }
       return;
     }
@@ -241,7 +241,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       if (Platform.OS === "web") {
         window.alert(msg);
       } else {
-        Alert.alert("Error", msg);
+        Alert.alert("Terjadi Kesalahan", msg);
       }
     } finally {
       setSubmittingReply(false);
@@ -376,7 +376,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
           if (Platform.OS === "web") {
             window.alert(msg);
           } else {
-            Alert.alert("Error", msg);
+            Alert.alert("Terjadi Kesalahan", msg);
           }
         }
       };

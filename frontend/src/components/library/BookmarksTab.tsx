@@ -218,14 +218,14 @@ export function BookmarksTab() {
 
             <View style={{ gap: 10, marginTop: 8 }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: colors.text, fontWeight: "900" }}>Update chapter</Text>
+                <Text style={{ color: colors.text, fontWeight: "900" }}>Pembaruan Chapter</Text>
                 <Pressable
                   hitSlop={8}
                   onPress={handleCheckUpdates}
                   style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.ghost }}
                 >
                   <Text style={{ color: colors.ghostText, fontWeight: "900" }}>
-                    {checkingUpdates ? "Cek..." : "Cek update"}
+                    {checkingUpdates ? "Memeriksa..." : "Cek Pembaruan"}
                   </Text>
                 </Pressable>
               </View>
@@ -247,7 +247,7 @@ export function BookmarksTab() {
                   }}
                 >
                   <Text style={{ color: colors.subtext }}>
-                    Belum ada update. Tekan "Cek update" untuk memeriksa.
+                    Belum ada pembaruan. Tekan &quot;Cek Pembaruan&quot; untuk memeriksa.
                   </Text>
                 </View>
               ) : (

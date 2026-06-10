@@ -85,7 +85,7 @@ export function HistoryTab() {
       const manga = hasMeta ? null : await fetchMangaDetail(h.mangaId);
       out.push({
         mangaId: h.mangaId,
-        title: h.mangaTitle ?? manga?.title ?? "Unknown",
+        title: h.mangaTitle ?? manga?.title ?? "Tidak diketahui",
         coverUrl:
           h.coverUrl ??
           manga?.cover_portrait_url ??
@@ -116,7 +116,7 @@ export function HistoryTab() {
       const data = await buildRows();
       setRows(data);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
+      const msg = e instanceof Error ? e.message : "Terjadi kesalahan.";
       setError(msg);
       setRows([]);
     } finally {
@@ -274,7 +274,7 @@ export function HistoryTab() {
           }}
         >
           <Text style={{ color: colors.ghostText, fontWeight: "900", textAlign: 'center' }}>
-            Retry
+            Coba Lagi
           </Text>
         </Pressable>
       </View>
@@ -461,6 +461,7 @@ export function HistoryTab() {
                               chapterId: item.chapterId,
                               mangaTitle: item.title,
                               coverUrl: item.coverUrl,
+                              mangaId: item.mangaId,
                             },
                           })
                         }

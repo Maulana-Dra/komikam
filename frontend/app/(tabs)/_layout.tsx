@@ -44,7 +44,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: "Beranda",
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} color={color} size={size} />
           ),
@@ -53,7 +53,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: "Search",
+          title: "Cari",
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "search" : "search-outline"} color={color} size={size} />
           ),
@@ -62,7 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="library"
         options={{
-          title: "Library",
+          title: "Perpustakaan",
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "library" : "library-outline"} color={color} size={size} />
           ),

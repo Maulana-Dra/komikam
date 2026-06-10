@@ -9,7 +9,13 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_KOMIKAM_API_URL": "https://sir-l.web.id"
+      }
     },
     "production": {
       "autoIncrement": true

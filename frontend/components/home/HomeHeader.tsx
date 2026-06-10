@@ -2,6 +2,7 @@ import { useAppTheme } from "@/src/theme/ThemeContext";
 import React from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { Text } from "@/components/ui/app-text";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Poppins } from "@/constants/theme";
 
 type Props = {
@@ -34,10 +35,12 @@ export default function HomeHeader({ query, onChangeQuery }: Props) {
           KOMIK
         </Text>
 
-        <Pressable onPress={() => void toggle()}>
-          <Text style={{ fontSize: 18 }}>
-            {isDark ? "☀️" : "🌙"}
-          </Text>
+        <Pressable onPress={() => void toggle()} style={{ padding: 4 }}>
+          <Ionicons
+            name={isDark ? "sunny-outline" : "moon-outline"}
+            size={20}
+            color={colors.text}
+          />
         </Pressable>
       </View>
 

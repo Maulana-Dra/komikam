@@ -42,7 +42,7 @@ const MOCK_GENRES = [
 
 const FORMAT_OPTIONS = ["Manga", "Manhwa", "Manhua"];
 const TYPE_OPTIONS = ["Mirror", "Project"];
-const STATUS_OPTIONS = ["Ongoing", "Completed", "Hiatus"];
+const STATUS_OPTIONS = ["Berlangsung", "Selesai", "Hiatus"];
 
 type SortKey = "latest" | "popular" | "rating" | "bookmark";
 type SortOption = { label: string; value: SortKey };
@@ -50,20 +50,12 @@ const SORT_OPTIONS: SortOption[] = [
   { label: "Terbaru", value: "latest" },
   { label: "Popularitas", value: "popular" },
   { label: "Rating", value: "rating" },
-  { label: "Bookmark", value: "bookmark" },
+  { label: "Markah", value: "bookmark" },
 ];
 
 // ─────────────────────────── helpers ─────────────────────────────
 function getFlagEmoji(countryId: string) {
-  const map: Record<string, string> = {
-    kr: "🇰🇷",
-    jp: "🇯🇵",
-    cn: "🇨🇳",
-    id: "🇮🇩",
-    gb: "🇬🇧",
-    us: "🇺🇸",
-  };
-  return map[(countryId || "").toLowerCase()] || countryId?.toUpperCase() || "";
+  return (countryId || "").toUpperCase();
 }
 
 function formatViews(views: number) {
@@ -98,8 +90,8 @@ function parseRelativeTime(dateStr: string) {
 }
 
 function getStatusLabel(status: number) {
-  if (status === 1) return "Ongoing";
-  if (status === 2) return "Completed";
+  if (status === 1) return "Berlangsung";
+  if (status === 2) return "Selesai";
   return "";
 }
 
@@ -278,7 +270,7 @@ const SidebarContent = ({
             }}
           >
             <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "800" }}>
-              Clear ({totalActive})
+              Hapus ({totalActive})
             </Text>
           </Pressable>
         )}
@@ -317,7 +309,7 @@ const SidebarContent = ({
       </CollapsibleSection>
 
       {/* Type */}
-      <CollapsibleSection title="Type" colors={colors}>
+      <CollapsibleSection title="Tipe" colors={colors}>
         <FilterChips
           options={TYPE_OPTIONS}
           selected={selectedTypes}
@@ -379,7 +371,7 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
           />
           {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
             <View style={{ position: 'absolute', top: -4, right: -4, backgroundColor: '#FF3B30', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 1, elevation: 2, zIndex: 10 }}>
-              <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>NEW</Text>
+              <Text style={{ color: 'white', fontSize: 9, fontWeight: '900' }}>BARU</Text>
             </View>
           )}
         </View>
@@ -487,7 +479,7 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
         ) : null}
         {item.latest_chapter_time && (new Date().getTime() - new Date(item.latest_chapter_time).getTime()) / (1000 * 3600 * 24) <= 3 && (
           <View style={{ position: 'absolute', top: 6, right: 6, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 3 }}>
-            <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>NEW</Text>
+            <Text style={{ color: 'white', fontSize: 10, fontWeight: '900' }}>BARU</Text>
           </View>
         )}
         {item.status ? (
@@ -497,7 +489,7 @@ const MangaCard = ({ item, colors, isGrid }: CardProps) => {
         ) : null}
         {item.country_id ? (
           <View style={{ position: "absolute", bottom: 6, right: 6, backgroundColor: "rgba(0,0,0,0.6)", paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4, flexDirection: "row", alignItems: "center", gap: 2 }}>
-            <Text style={{ fontSize: 10 }}>{getFlagEmoji(item.country_id)}</Text>
+            <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFlagEmoji(item.country_id)}</Text>
             <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "700" }}>{getFormatLabel(item)}</Text>
           </View>
         ) : null}
@@ -1087,8 +1079,8 @@ export default function SearchScreen() {
           />
           {/* Status */}
           {[
-            { label: "Ongoing", value: "ongoing" },
-            { label: "Completed", value: "completed" },
+          { label: "Berlangsung", value: "ongoing" },
+            { label: "Selesai", value: "completed" },
           ].map((s) => (
             <Pressable
               key={s.value}

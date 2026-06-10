@@ -15,10 +15,18 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
-import { Platform } from "react-native";
+import { Platform, LogBox } from "react-native";
 import "react-native-reanimated";
-
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { CrashBoundary } from "@/src/components/CrashBoundary";
+import { initCrashLogger } from "@/src/utils/crashLogger";
 import { AppThemeProvider, useAppTheme } from "../src/theme/ThemeContext";
+
+// Abaikan error merah dari expo-notifications di Expo Go
+LogBox.ignoreLogs(["expo-notifications: Android Push notifications"]);
+initCrashLogger();
+
+const queryClient = new QueryClient();
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -99,8 +107,12 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AppThemeProvider>
-      <RootNavigator />
-    </AppThemeProvider>
+    <CrashBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppThemeProvider>
+          <RootNavigator />
+        </AppThemeProvider>
+      </QueryClientProvider>
+    </CrashBoundary>
   );
 }

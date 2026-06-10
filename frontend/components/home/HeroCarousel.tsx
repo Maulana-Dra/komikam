@@ -203,7 +203,7 @@ export default function HeroCarousel({ items, colors, onPressItem }: HeroCarouse
                       marginBottom: 16,
                     }}
                   >
-                    {item.description || "No description available."}
+                    {item.description || "Tidak ada deskripsi tersedia."}
                   </Text>
 
                   {/* CTA Button — lebih besar & solid */}

@@ -34,12 +34,14 @@
           "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#0B0B0E",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0B0B0E"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -48,8 +50,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "0f5cdf52-9d5c-4d80-9ccc-eac9651c7499"
+        "projectId": "f9f81186-6f8a-4fcf-8f30-308ee27b7948"
       }
-    }
+    },
+    "owner": "the_l"
   }
 }

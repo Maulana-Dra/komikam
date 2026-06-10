@@ -1,13 +1,16 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image as ExpoImage } from "expo-image";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   FlatList,
   Platform,
   Image as RNImage,
+  PanResponder,
   Pressable,
   ScrollView,
   View,
@@ -15,8 +18,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
+import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getChapterDetail, getChapterList, getMangaDetail } from "../../src/api/shngmClient";
-import type {
+import type { 
   ShngmChapter,
   ShngmChapterDetailData,
 } from "../../src/api/shngmTypes";
@@ -25,19 +29,13 @@ import {
   upsertProgress,
   markChapterAsReadLocal,
 } from "../../src/store/history";
-import { getToken } from "../../src/store/authToken";
 import {
   getReaderSettings,
   ReaderSettings,
   setReaderSettings,
 } from "../../src/store/readerSettings";
-
-// Type harus di atas semua komponen yang memakainya
-type PageItem = {
-  key: string;
-  index: number;
-  url: string;
-};
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import AnimatedReanimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from "react-native-reanimated";
 
 function joinUrl(base: string, path: string, filename: string) {
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
@@ -46,106 +44,247 @@ function joinUrl(base: string, path: string, filename: string) {
   return `${b}${pp}${filename}`;
 }
 
+type PageItem = {
+  key: string;
+  index: number;
+  url: string;
+};
+
+const sizeCache = new Map<string, number>();
+
 function PageImage({
   uri,
   onSingleTap,
   bg,
+  contentWidth,
 }: {
   uri: string;
   onSingleTap: () => void;
   bg: string;
+  contentWidth: number;
 }) {
-  const { width: windowW } = useWindowDimensions();
-  const imageWidth = Math.min(680, windowW);
-  // default rasio 3:4 (portrait manga), akan dikoreksi setelah getSize
-  const [imgHeight, setImgHeight] = React.useState<number>(imageWidth * (4 / 3));
-  const lastTapRef = React.useRef<number>(0);
-  const tapTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const zoomedRef = React.useRef<boolean>(false);
+  const screenW = Dimensions.get("window").width;
+  const imgW = contentWidth;
+  const cachedRatio = sizeCache.get(uri);
+  const [height, setHeight] = React.useState<number>(imgW * (cachedRatio ?? 1.4));
 
-  // Hitung tinggi berdasarkan aspek rasio asli gambar
   React.useEffect(() => {
-    let alive = true;
-    RNImage.getSize(
-      uri,
-      (w, h) => { if (alive) setImgHeight(imageWidth * (h / w)); },
-      () => { /* gunakan default */ },
-    );
-    return () => {
-      alive = false;
-      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
-    };
-  }, [uri, imageWidth]);
-
-  // Reset zoom saat gambar berubah
-  React.useEffect(() => {
-    zoomedRef.current = false;
-    scale.setValue(1);
-  }, [scale, uri]);
-
-  const handleTap = React.useCallback(() => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      // double tap → toggle zoom
-      if (tapTimerRef.current) { clearTimeout(tapTimerRef.current); tapTimerRef.current = null; }
-      lastTapRef.current = 0;
-      const next = !zoomedRef.current;
-      zoomedRef.current = next;
-      Animated.spring(scale, {
-        toValue: next ? 2 : 1,
-        useNativeDriver: true,
-        speed: 20,
-        bounciness: 4,
-      }).start();
-      return;
+    if (cachedRatio) {
+      setHeight(imgW * cachedRatio);
     }
-    lastTapRef.current = now;
-    tapTimerRef.current = setTimeout(() => {
-      onSingleTap();
-      tapTimerRef.current = null;
-    }, 310);
-  }, [onSingleTap, scale]);
+  }, [cachedRatio, imgW]);
+
+  const [isZoomed, setIsZoomed] = React.useState(false);
+  const [loadingState, setLoadingState] = React.useState({ loading: true, progress: 0 });
+
+  // Reanimated shared values for zoom/pan gestures
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const maxScale = 4;
+  const minScale = 1;
+
+  // Double Tap gesture: Toggles between 1x and 2.5x scale
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd((_event, success) => {
+      if (success) {
+        if (scale.value > 1) {
+          scale.value = withTiming(1);
+          translateX.value = withTiming(0);
+          translateY.value = withTiming(0);
+          savedScale.value = 1;
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+          runOnJS(setIsZoomed)(false);
+        } else {
+          scale.value = withTiming(2.5);
+          savedScale.value = 2.5;
+          runOnJS(setIsZoomed)(true);
+        }
+      }
+    });
+
+  // Single Tap gesture: Toggles UI overlay controls
+  const singleTap = Gesture.Tap()
+    .numberOfTaps(1)
+    .requireExternalGestureToFail(doubleTap)
+    .onEnd((_event, success) => {
+      if (success) {
+        runOnJS(onSingleTap)();
+      }
+    });
+
+  // Pinch gesture for multi-touch zoom
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((event) => {
+      scale.value = Math.max(minScale, Math.min(savedScale.value * event.scale, maxScale));
+      if (scale.value > 1 && !isZoomed) {
+        runOnJS(setIsZoomed)(true);
+      }
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+      if (scale.value < 1.1) {
+        scale.value = withTiming(1);
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedScale.value = 1;
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+        runOnJS(setIsZoomed)(false);
+      }
+    });
+
+  // Pan gesture for dragging while zoomed in
+  const panGesture = Gesture.Pan()
+    .enabled(isZoomed)
+    .onUpdate((event) => {
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
+    })
+    .onEnd(() => {
+      if (scale.value > 1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    Gesture.Exclusive(doubleTap, singleTap),
+    Gesture.Simultaneous(pinchGesture, panGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
 
   return (
-    <Pressable onPress={handleTap} style={{ backgroundColor: bg, alignItems: "center", width: "100%" }}>
-      {/* Gambar mengisi lebar penuh layar, tinggi menyesuaikan aspek rasio */}
-      <Animated.View
-        style={{
-          width: imageWidth,
-          height: imgHeight,
-          transform: [{ scale }],
-        }}
-      >
-        <ExpoImage
-          source={{ uri }}
-          style={{ width: "100%", height: "100%" }}
-          contentFit="fill"
-          cachePolicy="disk"
-          transition={0}
-        />
-      </Animated.View>
-    </Pressable>
+    <GestureDetector gesture={composedGesture}>
+      <View style={{ width: screenW, backgroundColor: bg, alignItems: "center", overflow: "hidden", position: "relative" }}>
+        <AnimatedReanimated.View style={[{ width: imgW, height }, animatedStyle]}>
+          <ExpoImage
+            source={{ uri }}
+            style={{ width: "100%", height: "100%" }}
+            contentFit="cover"
+            cachePolicy="disk"
+            transition={0}
+            onLoadStart={() => setLoadingState({ loading: true, progress: 0 })}
+            onProgress={({ loaded, total }) => {
+              const pct = total > 0 ? Math.round((loaded / total) * 100) : 0;
+              setLoadingState({ loading: true, progress: pct });
+            }}
+            onLoad={(event) => {
+              setLoadingState({ loading: false, progress: 100 });
+              if (event.source) {
+                const ratio = event.source.height / event.source.width;
+                sizeCache.set(uri, ratio);
+                setHeight(imgW * ratio);
+              }
+            }}
+            onError={() => setLoadingState({ loading: false, progress: 0 })}
+          />
+          {loadingState.loading && (
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(11, 11, 14, 0.96)",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <ActivityIndicator color="#4A8FE2" size="large" />
+              <Text style={{ color: "#F2F2F7", fontWeight: "900", fontSize: 13 }}>
+                Memuat Halaman... {loadingState.progress}%
+              </Text>
+            </View>
+          )}
+        </AnimatedReanimated.View>
+      </View>
+    </GestureDetector>
   );
 }
 
 const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 60 };
 
 export default function ReaderScreen() {
+  React.useEffect(() => {
+    const tag = "itzkomik-reader";
+    let active = true;
+    let activated = false;
+
+    try {
+      activateKeepAwakeAsync(tag)
+        .then(() => {
+          if (active) {
+            activated = true;
+          } else {
+            try {
+              void deactivateKeepAwake(tag).catch(() => {});
+            } catch (e) {}
+          }
+        })
+        .catch((err) => {
+          console.warn("Keep awake activation denied/failed:", err);
+        });
+    } catch (e) {}
+
+    return () => {
+      active = false;
+      if (activated) {
+        try {
+          void deactivateKeepAwake(tag).catch(() => {});
+        } catch (e) {}
+      }
+    };
+  }, []);
   const router = useRouter();
-  const { chapterId, mangaTitle, coverUrl } = useLocalSearchParams<{
+  const { chapterId, mangaTitle, coverUrl, mangaId: mangaIdParam } = useLocalSearchParams<{
     chapterId: string;
     mangaTitle?: string;
     coverUrl?: string;
+    mangaId?: string;
   }>();
   const id = typeof chapterId === "string" ? chapterId : "";
   const safeTitle = typeof mangaTitle === "string" ? mangaTitle : "";
   const safeCoverUrl = typeof coverUrl === "string" ? coverUrl : "";
 
+  const { resolved } = useAppTheme();
+  const isDark = resolved === "dark";
   const insets = useSafeAreaInsets();
+  const colors = React.useMemo(
+    () => ({
+      bg: isDark ? "#0B0B0E" : "#F6F1E9",
+      text: isDark ? "#F2F2F7" : "#1E2329",
+      subtext: isDark ? "#B3B3C2" : "#6A625A",
+      border: isDark ? "#242434" : "#E6DED2",
+      header: isDark ? "#121218" : "#FBF6EE",
+      headerBtn: isDark ? "#1A1A24" : "#EFE6DA",
+      headerBtnText: isDark ? "#F2F2F7" : "#1E2329",
+    }),
+    [isDark],
+  );
 
   const { width: screenWidth } = useWindowDimensions();
-  const isDesktop = screenWidth >= 1024;
+  const isDesktop = screenWidth >= 1024; // Naikkan threshold ke 1024 agar tidak kena di HP high-res
+  const contentWidth = isDesktop ? Math.min(800, screenWidth * 0.8) : screenWidth;
 
   const [fetchedMangaTitle, setFetchedMangaTitle] = React.useState<string | null>(null);
   const [fetchedCoverUrl, setFetchedCoverUrl] = React.useState<string | null>(null);
@@ -158,14 +297,21 @@ export default function ReaderScreen() {
   const [chapterNumber, setChapterNumber] = React.useState<number>(0);
   const [currentIndex, setCurrentIndex] = React.useState<number>(0);
   const [controlsVisible, setControlsVisible] = React.useState<boolean>(true);
+  const [sliderWidth, setSliderWidth] = React.useState<number>(0);
+  const [sliderPageX, setSliderPageX] = React.useState<number>(0);
+  const [isScrubbing, setIsScrubbing] = React.useState<boolean>(false);
+  const [scrubIndex, setScrubIndex] = React.useState<number | null>(null);
   const [resumeIndex, setResumeIndex] = React.useState<number | null>(null);
   const [resumeVisible, setResumeVisible] = React.useState<boolean>(false);
 
   const listRef = React.useRef<FlatList<PageItem>>(null);
+  const sliderRef = React.useRef<View>(null);
   const resumeCheckedRef = React.useRef<string>("");
+  const scrubIndexRef = React.useRef<number | null>(null);
 
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [loadingNext, setLoadingNext] = React.useState<boolean>(false);
 
   // Settings state
   const [settings, setSettings] = React.useState<ReaderSettings>({
@@ -173,8 +319,6 @@ export default function ReaderScreen() {
     readerBg: "black",
     readingMode: "scroll",
   });
-
-
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const settingsAnim = React.useRef(new Animated.Value(0)).current;
   const [chapterListVisible, setChapterListVisible] = React.useState(false);
@@ -221,8 +365,20 @@ export default function ReaderScreen() {
       .catch(() => {});
   }, [mangaId]);
 
+  const [isOfflineReader, setIsOfflineReader] = React.useState<boolean>(false);
+
   const pages = React.useMemo(() => {
     if (!chapterData) return [];
+    if (isOfflineReader) {
+      // Offline reading is native-only
+      const FileSystem = require('expo-file-system/src/legacy');
+      const localDir = `${FileSystem.documentDirectory}downloaded_manga/${mangaId}/${id}/`;
+      return chapterData.chapter.data.map((filename, idx) => ({
+        key: `${chapterData.chapter_id}:${idx}:${filename}`,
+        index: idx,
+        url: `${localDir}${filename}`,
+      }));
+    }
     const base =
       settings.imageQuality === "low"
         ? chapterData.base_url_low
@@ -233,9 +389,7 @@ export default function ReaderScreen() {
       index: idx,
       url: joinUrl(base, path, filename),
     }));
-  }, [chapterData, settings.imageQuality]);
-
-
+  }, [chapterData, isOfflineReader, settings.imageQuality, mangaId, id]);
 
   const load = React.useCallback(async () => {
     if (!id) return;
@@ -243,9 +397,70 @@ export default function ReaderScreen() {
     try {
       setLoading(true);
       setError(null);
+      setIsOfflineReader(false);
 
-      const res = await getChapterDetail(id);
-      const d = res.data;
+      let d: ShngmChapterDetailData | null = null;
+      let offlineMode = false;
+
+      // Native offline reading only — skip on web
+      if (Platform.OS !== 'web') {
+        const FileSystem = require('expo-file-system/src/legacy');
+        const rootDir = `${FileSystem.documentDirectory}downloaded_manga/`;
+        let manifestPath = "";
+
+        try {
+          if (mangaIdParam) {
+            const chapDir = `${rootDir}${mangaIdParam}/${id}`;
+            const manifestFile = `${chapDir}/manifest.json`;
+            const manifestInfo = await FileSystem.getInfoAsync(manifestFile);
+            if (manifestInfo.exists) {
+              manifestPath = manifestFile;
+            }
+          }
+
+          if (!manifestPath) {
+            const rootDirNoSlash = rootDir.endsWith('/') ? rootDir.slice(0, -1) : rootDir;
+            const rootInfo = await FileSystem.getInfoAsync(rootDirNoSlash);
+            if (rootInfo.exists) {
+              const mangaDirs = await FileSystem.readDirectoryAsync(rootDirNoSlash + '/');
+              for (const mId of mangaDirs) {
+                const chapDir = `${rootDir}${mId}/${id}`;
+                const manifestFile = `${chapDir}/manifest.json`;
+                const manifestInfo = await FileSystem.getInfoAsync(manifestFile);
+                if (manifestInfo.exists) {
+                  manifestPath = manifestFile;
+                  break;
+                }
+              }
+            }
+          }
+        } catch {}
+
+        if (manifestPath) {
+          const raw = await FileSystem.readAsStringAsync(manifestPath);
+          const manifest = JSON.parse(raw);
+          d = {
+            chapter_id: String(manifest.chapterId || id),
+            manga_id: String(manifest.mangaId || mangaIdParam || ""),
+            chapter_number: manifest.chapterNumber,
+            chapter_title: manifest.chapterTitle,
+            prev_chapter_id: "",
+            next_chapter_id: "",
+            base_url: manifest.base_url,
+            base_url_low: manifest.base_url_low || manifest.base_url,
+            chapter: {
+              path: manifest.chapter.path,
+              data: manifest.chapter.data
+            }
+          } as unknown as ShngmChapterDetailData;
+          offlineMode = true;
+        }
+      }
+
+      if (!offlineMode || !d) {
+        const res = await getChapterDetail(id);
+        d = res.data;
+      }
 
       setMangaId(d.manga_id);
       setChapterNumber(d.chapter_number);
@@ -261,19 +476,24 @@ export default function ReaderScreen() {
 
       setPrevId(d.prev_chapter_id);
       setNextId(d.next_chapter_id);
+      setIsOfflineReader(offlineMode);
+
 
       setChapterData(d);
 
       setCurrentIndex(0);
+      setScrubIndex(null);
+      scrubIndexRef.current = null;
       setResumeIndex(null);
       setResumeVisible(false);
+      setLoadingNext(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [id, safeCoverUrl, safeTitle]);
+  }, [id, mangaIdParam, safeTitle, safeCoverUrl]);
 
   React.useEffect(() => {
     void load();
@@ -301,6 +521,52 @@ export default function ReaderScreen() {
     void markChapterAsReadLocal(mangaId, id);
   }, [mangaId, id, chapterNumber, pages.length, safeTitle, safeCoverUrl, fetchedMangaTitle, fetchedCoverUrl]);
 
+  // Next chapter background prefetching
+  React.useEffect(() => {
+    if (!nextId || isOfflineReader) return;
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getChapterDetail(nextId);
+        if (!active) return;
+        
+        const nextData = res.data;
+        if (!nextData || !nextData.chapter || !Array.isArray(nextData.chapter.data)) {
+          return;
+        }
+
+        const base = settings.imageQuality === "low" ? nextData.base_url_low : nextData.base_url;
+        const path = nextData.chapter.path;
+        if (!base || !path) return;
+
+        const urls = nextData.chapter.data
+          .map((filename: string) => {
+            if (!filename) return "";
+            return joinUrl(base, path, filename);
+          })
+          .filter((url: string) => url && (url.startsWith("http://") || url.startsWith("https://")));
+        
+        // Prefetch each url sequentially to prevent overloading and native crashes
+        for (const url of urls) {
+          if (!active) break;
+          try {
+            await ExpoImage.prefetch(url);
+          } catch (err) {
+            console.warn("Safe prefetch failed for:", url, err);
+          }
+        }
+      } catch (err) {
+        console.warn("Background prefetch failed:", err);
+      }
+    }, 3000); // 3 seconds delay to prioritize current chapter loading
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [nextId, isOfflineReader, settings.imageQuality]);
+
   React.useEffect(() => {
     if (!mangaId || !id || pages.length === 0) return;
 
@@ -310,8 +576,6 @@ export default function ReaderScreen() {
 
     let alive = true;
     void (async () => {
-      const token = await getToken();
-      if (!token) return;
       const latest = await getLatestProgressByManga(mangaId);
       if (!alive) return;
       if (!latest || latest.chapterId !== id) return;
@@ -343,7 +607,22 @@ export default function ReaderScreen() {
       if (idx < 0 || idx >= pages.length) return;
       const url = pages[idx]?.url;
       if (!url) return;
-      void RNImage.prefetch(url).catch(() => undefined);
+      
+      // Prefetch and pre-measure only remote HTTP/HTTPS URLs
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        void RNImage.prefetch(url).catch(() => undefined);
+
+        // Pre-measure image size to populate sizeCache
+        if (!sizeCache.has(url)) {
+          RNImage.getSize(
+            url,
+            (w: number, h: number) => {
+              sizeCache.set(url, h / w);
+            },
+            () => {}
+          );
+        }
+      }
     });
   }, [currentIndex, pages]);
 
@@ -351,7 +630,7 @@ export default function ReaderScreen() {
   progressDataRef.current = { mangaId, id, chapterNumber, totalPages: pages.length, safeTitle: fetchedMangaTitle || safeTitle, safeCoverUrl: fetchedCoverUrl || safeCoverUrl };
 
   const onViewableItemsChanged = React.useRef(
-    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
       const first = viewableItems
         .map((v) => v.index)
         .find((idx): idx is number => typeof idx === "number" && idx >= 0);
@@ -379,6 +658,34 @@ export default function ReaderScreen() {
     }
   ).current;
 
+  const handleEndReached = React.useCallback(() => {
+    if (loadingNext || !nextId) return;
+    setLoadingNext(true);
+    setTimeout(() => {
+      router.replace({
+        pathname: "/reader/[chapterId]",
+        params: { chapterId: nextId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
+      });
+    }, 600);
+  }, [loadingNext, nextId, safeTitle, safeCoverUrl, router, mangaId]);
+
+  const renderFooter = React.useCallback(() => {
+    const pageBgColor = settings.readerBg === "white" ? "#FFF" : settings.readerBg === "dark" ? "#121218" : "#000";
+    if (!nextId) {
+      return (
+        <View style={{ paddingVertical: 40, alignItems: "center", justifyContent: "center", backgroundColor: pageBgColor }}>
+          <Text style={{ color: "rgba(242,242,247,0.4)", fontWeight: "700" }}>Akhir dari Manga ini</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={{ paddingVertical: 40, alignItems: "center", justifyContent: "center", backgroundColor: pageBgColor, gap: 8 }}>
+        <ActivityIndicator color="#4A8FE2" />
+        <Text style={{ color: "#4A8FE2", fontWeight: "900" }}>Memuat Chapter Berikutnya...</Text>
+      </View>
+    );
+  }, [nextId, settings.readerBg]);
+
   const handleToggleControls = React.useCallback(() => {
     setControlsVisible((v) => !v);
   }, []);
@@ -401,6 +708,58 @@ export default function ReaderScreen() {
   );
 
   const totalPages = pages.length;
+  const displayIndex =
+    isScrubbing && scrubIndex !== null ? scrubIndex : currentIndex;
+  const pageLabel =
+    totalPages > 0 ? `${displayIndex + 1} / ${totalPages}` : "0 / 0";
+  const progress = totalPages > 0 ? (displayIndex + 1) / totalPages : 0;
+  const sliderPadding = 10;
+  const sliderUsable = Math.max(1, sliderWidth - sliderPadding * 2);
+
+  const handleSliderTouch = React.useCallback(
+    (x: number) => {
+      if (totalPages <= 0 || sliderUsable <= 0) return;
+      const localX = Math.max(0, Math.min(sliderUsable, x - sliderPadding));
+      const ratio = Math.max(0, Math.min(1, localX / sliderUsable));
+      const idx = Math.min(
+        totalPages - 1,
+        Math.max(0, Math.round(ratio * (totalPages - 1))),
+      );
+      setScrubIndex(idx);
+      scrubIndexRef.current = idx;
+    },
+    [sliderPadding, sliderUsable, totalPages],
+  );
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          setIsScrubbing(true);
+          const localX = event.nativeEvent.pageX - sliderPageX;
+          handleSliderTouch(localX);
+        },
+        onPanResponderMove: (event) => {
+          const localX = event.nativeEvent.pageX - sliderPageX;
+          handleSliderTouch(localX);
+        },
+        onPanResponderRelease: () => {
+          setIsScrubbing(false);
+          const target = scrubIndexRef.current;
+          if (target !== null) {
+            scrollToIndex(target);
+          }
+          scrubIndexRef.current = null;
+        },
+        onPanResponderTerminate: () => {
+          setIsScrubbing(false);
+          scrubIndexRef.current = null;
+        },
+      }),
+    [handleSliderTouch, scrollToIndex, sliderPageX],
+  );
 
   if (loading) {
     return (
@@ -446,15 +805,10 @@ export default function ReaderScreen() {
     borderColor: "rgba(255,255,255,0.1)" as const,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#000" }}>
 
       {/* ── Top Header (breadcrumb) ──────────────────────────── */}
       {/* ══════════════════════════════════════════════════════════════════════
@@ -553,7 +907,7 @@ export default function ReaderScreen() {
         </View>
       )}
  
-      {/* ── Pages: Scroll Mode ─────────────── */}
+      {/* ── Pages ──────────────────────────────────────────── */}
       <FlatList
         ref={listRef}
         data={pages}
@@ -564,6 +918,7 @@ export default function ReaderScreen() {
             uri={item.url}
             onSingleTap={handleToggleControls}
             bg={pageBg}
+            contentWidth={contentWidth}
           />
         )}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -571,7 +926,9 @@ export default function ReaderScreen() {
         initialNumToRender={3}
         windowSize={5}
         removeClippedSubviews
-        onEndReachedThreshold={0.4}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.05}
+        ListFooterComponent={renderFooter}
         onScrollToIndexFailed={onScrollToIndexFailed}
       />
  
@@ -606,6 +963,30 @@ export default function ReaderScreen() {
             </View>
           )}
 
+          {/* ── Floating scroll up/down (right) ─────────────── */}
+          <View
+            style={{
+              position: "absolute",
+              right: 12,
+              bottom: insets.bottom + 90,
+              gap: 8,
+              zIndex: 8,
+            }}
+          >
+            <Pressable
+              onPress={() => scrollToIndex(Math.max(0, currentIndex - 1))}
+              style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
+            >
+              <Ionicons name="chevron-up" size={ICON_SIZE} color={ICON_COLOR} />
+            </Pressable>
+            <Pressable
+              onPress={() => scrollToIndex(Math.min(totalPages - 1, currentIndex + 1))}
+              style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
+            >
+              <Ionicons name="chevron-down" size={ICON_SIZE} color={ICON_COLOR} />
+            </Pressable>
+          </View>
+
           {/* ── Floating bottom toolbar (4 box buttons) ──────── */}
           <View
             style={{
@@ -617,6 +998,11 @@ export default function ReaderScreen() {
               zIndex: 8,
             }}
           >
+            {/* Page label */}
+            <Text style={{ color: "rgba(242,242,247,0.55)", fontSize: 11, marginBottom: 10, fontWeight: "700" }}>
+              {pageLabel}
+            </Text>
+
             {/* 4 box buttons row */}
             <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
               {/* Prev chapter */}
@@ -625,7 +1011,7 @@ export default function ReaderScreen() {
                 onPress={() =>
                   prevId && router.replace({
                     pathname: "/reader/[chapterId]",
-                    params: { chapterId: prevId, mangaTitle: safeTitle, coverUrl: safeCoverUrl },
+                    params: { chapterId: prevId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
                   })
                 }
                 style={({ pressed }) => ({
@@ -652,6 +1038,14 @@ export default function ReaderScreen() {
                 <Ionicons name="list-outline" size={ICON_SIZE} color={ICON_COLOR} />
               </Pressable>
 
+              {/* Refresh */}
+              <Pressable
+                onPress={() => void load()}
+                style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.6 : 1 })}
+              >
+                <Ionicons name="refresh-outline" size={ICON_SIZE} color={ICON_COLOR} />
+              </Pressable>
+
               {/* Home */}
               <Pressable
                 onPress={() => router.push("/")}
@@ -666,7 +1060,7 @@ export default function ReaderScreen() {
                 onPress={() =>
                   nextId && router.replace({
                     pathname: "/reader/[chapterId]",
-                    params: { chapterId: nextId, mangaTitle: safeTitle, coverUrl: safeCoverUrl },
+                    params: { chapterId: nextId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
                   })
                 }
                 style={({ pressed }) => ({
@@ -680,30 +1074,6 @@ export default function ReaderScreen() {
           </View>
         </>
       )}
-
-      {/* ── Floating scroll up/down (right) ─────────────── */}
-      <View
-        style={{
-          position: "absolute",
-          right: isDesktop ? 24 : 12,
-          bottom: insets.bottom + 90,
-          gap: 8,
-          zIndex: 8,
-        }}
-      >
-        <Pressable
-          onPress={() => scrollToIndex(Math.max(0, currentIndex - 1))}
-          style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
-        >
-          <Ionicons name="chevron-up" size={ICON_SIZE} color={ICON_COLOR} />
-        </Pressable>
-        <Pressable
-          onPress={() => scrollToIndex(Math.min(totalPages - 1, currentIndex + 1))}
-          style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
-        >
-          <Ionicons name="chevron-down" size={ICON_SIZE} color={ICON_COLOR} />
-        </Pressable>
-      </View>
 
       {/* ── Chapter List Panel (bottom sheet) ───────────────── */}
       {chapterListVisible && (
@@ -807,8 +1177,6 @@ export default function ReaderScreen() {
               </Pressable>
             </View>
             <View style={{ gap: 20 }}>
-
-
               {/* Image Quality */}
               <View>
                 <Text style={{ color: "#F2F2F7", fontWeight: "700", marginBottom: 10 }}>Kualitas Gambar</Text>
@@ -859,6 +1227,6 @@ export default function ReaderScreen() {
           </Animated.View>
         </View>
       )}
-    </View>
+    </GestureHandlerRootView>
   );
 }

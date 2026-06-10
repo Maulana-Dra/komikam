@@ -6,19 +6,22 @@ import { Text } from '@/components/ui/app-text';
 import { useAppTheme } from '@/src/theme/ThemeContext';
 import { BookmarksTab } from '@/src/components/library/BookmarksTab';
 import { HistoryTab } from '@/src/components/library/HistoryTab';
+import { DownloadsTab } from '@/src/components/library/DownloadsTab';
 
 export default function LibraryScreen() {
   const { resolved } = useAppTheme();
   const isDark = resolved === 'dark';
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const [activeTab, setActiveTab] = useState<'bookmarks' | 'history'>('bookmarks');
+  const [activeTab, setActiveTab] = useState<'bookmarks' | 'history' | 'downloads'>('bookmarks');
 
   React.useEffect(() => {
     if (params.tab === 'history') {
       setActiveTab('history');
     } else if (params.tab === 'bookmarks') {
       setActiveTab('bookmarks');
+    } else if (params.tab === 'downloads') {
+      setActiveTab('downloads');
     }
   }, [params.tab]);
   
@@ -28,7 +31,7 @@ export default function LibraryScreen() {
 
   React.useEffect(() => {
     Animated.spring(tabAnim, {
-      toValue: activeTab === 'bookmarks' ? 0 : 1,
+      toValue: activeTab === 'bookmarks' ? 0 : activeTab === 'history' ? 1 : 2,
       useNativeDriver: true,
       tension: 60,
       friction: 9,
@@ -36,8 +39,12 @@ export default function LibraryScreen() {
   }, [activeTab, tabAnim]);
 
   const translateX = tabAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, containerWidth > 0 ? (containerWidth - 8) / 2 : 0],
+    inputRange: [0, 1, 2],
+    outputRange: [
+      0,
+      containerWidth > 0 ? (containerWidth - 8) / 3 : 0,
+      containerWidth > 0 ? (2 * (containerWidth - 8)) / 3 : 0
+    ],
   });
 
   const colors = React.useMemo(
@@ -57,7 +64,7 @@ export default function LibraryScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bg, paddingTop: insets.top }}>
       <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
         <Text style={{ color: colors.text, fontWeight: '900', fontSize: 24, marginBottom: 16 }}>
-          Library
+          Perpustakaan
         </Text>
         
         {/* Segmented Control */}
@@ -80,7 +87,7 @@ export default function LibraryScreen() {
               top: 4,
               bottom: 4,
               left: 4,
-              width: (containerWidth - 8) / 2,
+              width: (containerWidth - 8) / 3,
               backgroundColor: colors.primary,
               borderRadius: 8,
               transform: [{ translateX }],
@@ -101,7 +108,7 @@ export default function LibraryScreen() {
               fontWeight: '800', 
               color: activeTab === 'bookmarks' ? colors.primaryText : colors.subtext 
             }}>
-              Bookmarks
+              Markah
             </Text>
           </Pressable>
           
@@ -119,14 +126,38 @@ export default function LibraryScreen() {
               fontWeight: '800', 
               color: activeTab === 'history' ? colors.primaryText : colors.subtext 
             }}>
-              History
+              Riwayat
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setActiveTab('downloads')}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              alignItems: 'center',
+              borderRadius: 8,
+              zIndex: 1,
+            }}
+          >
+            <Text style={{ 
+              fontWeight: '800', 
+              color: activeTab === 'downloads' ? colors.primaryText : colors.subtext 
+            }}>
+              Unduhan
             </Text>
           </Pressable>
         </View>
       </View>
 
       <View style={{ flex: 1 }}>
-        {activeTab === 'bookmarks' ? <BookmarksTab /> : <HistoryTab />}
+        {activeTab === 'bookmarks' ? (
+          <BookmarksTab />
+        ) : activeTab === 'history' ? (
+          <HistoryTab />
+        ) : (
+          <DownloadsTab />
+        )}
       </View>
     </View>
   );

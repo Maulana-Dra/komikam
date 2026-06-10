@@ -10,7 +10,9 @@ import {
   ScrollView,
   TextInput,
   View,
-  useWindowDimensions
+  useWindowDimensions,
+  Alert,
+  Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -25,6 +27,8 @@ import { isBookmarked, toggleBookmark } from "../../src/store/bookmarks";
 import { getLatestProgressByManga, getReadChaptersLocal } from "../../src/store/history";
 import { getToken } from "../../src/store/authToken";
 import CommentSection from "@/components/manga/CommentSection";
+import { useQuery } from '@tanstack/react-query';
+import { isChapterDownloaded, downloadChapter, deleteDownloadedChapter } from "@/src/utils/downloader";
 
 type ResumeState = {
   chapterId: string;
@@ -34,7 +38,6 @@ type ResumeState = {
 } | null;
 
 type ScreenState = {
-  manga: ShngmManga | null;
   chapters: ShngmChapter[];
   allChapters: ShngmChapter[];
   page: number;
@@ -143,8 +146,13 @@ export default function MangaDetailScreen() {
     ],
   });
 
+  const { data: mangaDetail } = useQuery({
+    queryKey: ['mangaDetail', id],
+    queryFn: () => getMangaDetail(id!).then(res => res.data),
+    enabled: !!id,
+  });
+
   const [state, setState] = React.useState<ScreenState>({
-    manga: null,
     chapters: [],
     allChapters: [],
     page: 1,
@@ -153,6 +161,88 @@ export default function MangaDetailScreen() {
     loadingMore: false,
     error: null,
   });
+
+  const [downloadedChapters, setDownloadedChapters] = React.useState<Record<string, boolean>>({});
+  const [downloadProgress, setDownloadProgress] = React.useState<Record<string, number>>({});
+
+  // Batch-check downloaded chapters — native only (web has no download feature)
+  React.useEffect(() => {
+    if (Platform.OS === 'web' || state.chapters.length === 0 || !id) return;
+    let alive = true;
+    void (async () => {
+      const mapping: Record<string, boolean> = {};
+      try {
+        const FileSystem = require('expo-file-system/src/legacy');
+        const mangaDir = `${FileSystem.documentDirectory}downloaded_manga/${id}`;
+        const dirInfo = await FileSystem.getInfoAsync(mangaDir);
+        if (dirInfo.exists) {
+          const downloadedIds = await FileSystem.readDirectoryAsync(mangaDir + '/');
+          for (const ch of state.chapters) {
+            if (downloadedIds.includes(ch.chapter_id)) {
+              mapping[ch.chapter_id] = await isChapterDownloaded(id, ch.chapter_id);
+            } else {
+              mapping[ch.chapter_id] = false;
+            }
+          }
+        } else {
+          for (const ch of state.chapters) {
+            mapping[ch.chapter_id] = false;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to batch check downloaded chapters:", err);
+        for (const ch of state.chapters) {
+          mapping[ch.chapter_id] = await isChapterDownloaded(id, ch.chapter_id);
+        }
+      }
+      if (alive) setDownloadedChapters(mapping);
+    })();
+    return () => { alive = false; };
+  }, [state.chapters, id]);
+
+  const handleDownload = React.useCallback(async (chapterId: string) => {
+    if (!id || Platform.OS === 'web') return;
+
+    const isDownloaded = downloadedChapters[chapterId];
+
+    if (isDownloaded) {
+      Alert.alert(
+        "Hapus Unduhan?",
+        "Apakah Anda yakin ingin menghapus chapter ini dari penyimpanan lokal?",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Hapus",
+            style: "destructive",
+            onPress: async () => {
+              await deleteDownloadedChapter(id, chapterId);
+              setDownloadedChapters(prev => ({ ...prev, [chapterId]: false }));
+              setToast("Unduhan dihapus");
+            }
+          }
+        ]
+      );
+    } else {
+      try {
+        setDownloadProgress(prev => ({ ...prev, [chapterId]: 0 }));
+        const mTitle = typeof title === "string" ? title : (mangaDetail?.title || "Manga");
+        const mCover = typeof coverUrl === "string" ? coverUrl : (mangaDetail?.cover_portrait_url || mangaDetail?.cover_image_url || "");
+        await downloadChapter(id, chapterId, mTitle, mCover, (progress) => {
+          setDownloadProgress(prev => ({ ...prev, [chapterId]: progress }));
+        });
+        setDownloadedChapters(prev => ({ ...prev, [chapterId]: true }));
+        setToast("Unduhan selesai!");
+      } catch (err) {
+        Alert.alert("Gagal Mengunduh", err instanceof Error ? err.message : "Kesalahan tidak dikenal");
+      } finally {
+        setDownloadProgress(prev => {
+          const next = { ...prev };
+          delete next[chapterId];
+          return next;
+        });
+      }
+    }
+  }, [id, downloadedChapters, title, coverUrl, mangaDetail]);
 
   const [chapterOffset, setChapterOffset] = React.useState(0);
 
@@ -165,18 +255,18 @@ export default function MangaDetailScreen() {
       ? parseFloat(userRate)
       : null;
 
-  const displayTitle = state.manga?.title || routeTitle || "Manga";
+  const displayTitle = mangaDetail?.title || routeTitle || "Manga";
   const displayDescription =
-    state.manga?.description || routeDescription || "-";
+    mangaDetail?.description || routeDescription || "-";
   const displayCover =
-    state.manga?.cover_portrait_url ??
-    state.manga?.cover_image_url ??
+    mangaDetail?.cover_portrait_url ??
+    mangaDetail?.cover_image_url ??
     routeCoverUrl ??
     "";
-  const displayCountryId = state.manga?.country_id || routeCountryId;
+  const displayCountryId = mangaDetail?.country_id || routeCountryId;
   const displayUserRate =
-    typeof state.manga?.user_rate === "number"
-      ? state.manga.user_rate
+    typeof mangaDetail?.user_rate === "number"
+      ? mangaDetail.user_rate
       : Number.isFinite(parsedUserRate) ? parsedUserRate : null;
 
   // --- Helper format angka (1200 → "1.2K") ---
@@ -189,7 +279,7 @@ export default function MangaDetailScreen() {
 
   // --- Derived metadata dari API detail ---
   const displayMeta = React.useMemo(() => {
-    const m = state.manga;
+    const m = mangaDetail;
     if (!m) return null;
     return {
       genres: (m.taxonomy.Genre ?? []).filter((g) => g.name),
@@ -202,7 +292,7 @@ export default function MangaDetailScreen() {
       views: m.view_count,
       bookmarks: m.bookmark_count,
     };
-  }, [state.manga]);
+  }, [mangaDetail]);
 
   const metadataSections = React.useMemo(() => {
     if (!displayMeta) return [];
@@ -311,22 +401,19 @@ export default function MangaDetailScreen() {
     try {
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      // Ambil detail, chapter terbaru (page 1), dan cari chapter pertama (sort asc)
-      const [detailRes, chapterRes, firstChRes] = await Promise.all([
-        getMangaDetail(id),
-        getChapterList({ mangaId: id, page: 1, pageSize: 25, sortOrder: sortDir }),
+      // Ambil chapter terbaru (page 1), dan cari chapter pertama (sort asc)
+      const [chapterRes, firstChRes] = await Promise.all([
+        getChapterList({ mangaId: id, page: 1, pageSize: 20, sortOrder: sortDir }),
         // Gunakan getChapterList yang sudah ada untuk ambil chapter paling awal
         getChapterList({ mangaId: id, page: 1, pageSize: 1, sortOrder: "asc" }).catch(() => null)
       ]);
 
-      const manga: ShngmManga = detailRes.data;
       if (firstChRes && firstChRes.retcode === 0 && firstChRes.data.length > 0) {
         setFirstChapter(firstChRes.data[0]);
       }
 
       setState((s) => ({
         ...s,
-        manga,
         chapters: chapterRes.data,
         page: chapterRes.meta.page,
         totalPage: chapterRes.meta.total_page,
@@ -347,7 +434,7 @@ export default function MangaDetailScreen() {
         error: msg,
       }));
     }
-  }, [id, loadResume, loadBookmarkState, sortDir]);
+  }, [id, sortDir, loadResume, loadBookmarkState]);
 
   const loadChapters = React.useCallback(async (pageNum: number) => {
     if (!id) return;
@@ -476,6 +563,7 @@ export default function MangaDetailScreen() {
             chapterId: resume.chapterId,
             mangaTitle: displayTitle,
             coverUrl: displayCover,
+            mangaId: id,
           },
         })
       }
@@ -491,8 +579,7 @@ export default function MangaDetailScreen() {
     >
       <IconSymbol name="play.fill" size={18} color={colors.buttonText} />
       <Text style={{ color: colors.buttonText, fontWeight: "900" }}>
-        Lanjutkan: Chapter {resume.chapterNumber} (hal {resume.pageIndex + 1}/
-        {resume.totalPages})
+        Lanjutkan: Chapter {resume.chapterNumber}
       </Text>
     </Pressable>
   ) : null;
@@ -817,7 +904,7 @@ export default function MangaDetailScreen() {
             >
               {displayTitle}
             </Text>
-            {!!state.manga?.alternative_title && (
+            {!!mangaDetail?.alternative_title && (
               <Text 
                 style={{ 
                   fontSize: 13, 
@@ -827,7 +914,7 @@ export default function MangaDetailScreen() {
                 }} 
                 numberOfLines={1}
               >
-                {state.manga.alternative_title}
+                {mangaDetail.alternative_title}
               </Text>
             )}
           </View>
@@ -839,7 +926,7 @@ export default function MangaDetailScreen() {
             { icon: "star", color: "#FF9F43", value: typeof displayUserRate === "number" ? displayUserRate.toFixed(1) : "-" },
             { icon: "bookmark", color: "#00D2D3", value: displayMeta ? formatCount(displayMeta.bookmarks) : "0" },
             { icon: "eye", color: "#54A0FF", value: displayMeta ? formatCount(displayMeta.views) : "0" },
-            { icon: "trophy", color: "#9B59B6", value: state.manga?.rank ? `#${state.manga.rank}` : "-" },
+            { icon: "trophy", color: "#9B59B6", value: mangaDetail?.rank ? `#${mangaDetail.rank}` : "-" },
           ];
 
           const buttonStyle = {
@@ -856,9 +943,17 @@ export default function MangaDetailScreen() {
           const bacaBtn = (
             <Pressable
               onPress={() => {
-                const targetId = resume?.chapterId ?? state.manga?.latest_chapter_id;
+                const targetId = resume?.chapterId ?? mangaDetail?.latest_chapter_id;
                 if (targetId) {
-                  router.push(`/reader/${targetId}`);
+                  router.push({
+                    pathname: "/reader/[chapterId]",
+                    params: {
+                      chapterId: targetId,
+                      mangaTitle: displayTitle,
+                      coverUrl: displayCover,
+                      mangaId: id,
+                    },
+                  });
                 }
               }}
               style={{
@@ -945,7 +1040,7 @@ export default function MangaDetailScreen() {
           {showDescToggle && (
             <Pressable onPress={() => setDescExpanded((v) => !v)} style={{ marginTop: 6 }}>
               <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 13 }}>
-                {descExpanded ? "Show less" : "Read more"}
+                {descExpanded ? "Lebih sedikit" : "Selengkapnya"}
               </Text>
             </Pressable>
           )}
@@ -1107,7 +1202,7 @@ export default function MangaDetailScreen() {
                 color={colors.subtext}
               />
               <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
-                Jump
+                Naik
               </Text>
             </Pressable>
             <Pressable
@@ -1132,7 +1227,7 @@ export default function MangaDetailScreen() {
                 color={colors.subtext}
               />
               <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
-                {sortDir === "desc" ? "Latest" : "Oldest"}
+                {sortDir === "desc" ? "Terbaru" : "Terlama"}
               </Text>
             </Pressable>
           </View>
@@ -1342,39 +1437,42 @@ export default function MangaDetailScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding }}>
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: "/reader/[chapterId]",
-                  params: {
-                    chapterId: item.chapter_id,
-                    mangaTitle: displayTitle,
-                    coverUrl: displayCover,
-                  },
-                })
-              }
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.85 : 1,
-                paddingVertical: 6,
-              })}
+          <View style={{ width: "100%", maxWidth: 1000, alignSelf: "center", paddingHorizontal: contentPadding, paddingVertical: 6 }}>
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isDark ? 0.4 : 0.05,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
             >
-              <View
-                style={{
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  borderRadius: 16,
-                  padding: 16,
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/reader/[chapterId]",
+                    params: {
+                      chapterId: item.chapter_id,
+                      mangaTitle: displayTitle,
+                      coverUrl: displayCover,
+                      mangaId: id,
+                    },
+                  })
+                }
+                style={({ pressed }) => ({
+                  flex: 1,
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 16,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: isDark ? 0.4 : 0.05,
-                  shadowRadius: 4,
-                  elevation: 2,
-                }}
+                  padding: 16,
+                  opacity: pressed ? 0.75 : 1,
+                })}
               >
                 <ExpoImage
                   source={{ uri: item.thumbnail_image_url ?? "" }}
@@ -1449,14 +1547,51 @@ export default function MangaDetailScreen() {
                     </View>
                   </View>
                 </View>
+              </Pressable>
 
-                <IconSymbol
-                  name="chevron.right"
-                  size={18}
-                  color={colors.subtext}
-                />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingRight: 16 }}>
+                {/* Download Button / Indicator — native only */}
+                {Platform.OS !== 'web' && (
+                  <Pressable
+                    onPress={() => handleDownload(item.chapter_id)}
+                    hitSlop={12}
+                    style={({ pressed }) => ({ opacity: pressed ? 0.4 : 1, padding: 8 })}
+                  >
+                    {downloadProgress[item.chapter_id] !== undefined ? (
+                      <Text style={{ fontSize: 11, fontWeight: "900", color: "#4A8FE2" }}>
+                        {Math.round(downloadProgress[item.chapter_id] * 100)}%
+                      </Text>
+                    ) : downloadedChapters[item.chapter_id] ? (
+                      <Ionicons name="checkmark-circle" size={20} color="#34C759" />
+                    ) : (
+                      <Ionicons name="download-outline" size={20} color={colors.subtext} />
+                    )}
+                  </Pressable>
+                )}
+
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/reader/[chapterId]",
+                      params: {
+                        chapterId: item.chapter_id,
+                        mangaTitle: displayTitle,
+                        coverUrl: displayCover,
+                        mangaId: id,
+                      },
+                    })
+                  }
+                  hitSlop={8}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}
+                >
+                  <IconSymbol
+                    name="chevron.right"
+                    size={18}
+                    color={colors.subtext}
+                  />
+                </Pressable>
               </View>
-            </Pressable>
+            </View>
           </View>
         )}
       />
