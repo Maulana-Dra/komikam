@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -19,7 +20,6 @@ import {
   apiPostComment,
   apiPostReply,
   apiLikeComment,
-  apiReportComment,
   type ApiComment,
 } from "@/src/api/komikamApi";
 
@@ -27,10 +27,54 @@ interface CommentSectionProps {
   mangaId: string;
 }
 
+const PROFANITY_WORDS = new Set([
+  // Indonesian
+  "anjing", "babi", "bangsat", "bajingan", "kontol", "memek", "pepek", "ngentot", "ngewe", "pantek", "perek", "lonte", "jembut", "goblok", "tolol", "peler", "itil", "coli", "asu", "keparat", "brengsek", "pejuh",
+  // English
+  "fuck", "shit", "bitch", "asshole", "cunt", "bastard", "dick", "pussy", "slut", "whore", "motherfucker"
+]);
+
+const SPECIFIC_PROFANITY_SUBSTRINGS = [
+  "anjing", "kontol", "memek", "ngentot", "ngewe", "bajingan", "goblok", "tolol", "jembut", "lonte",
+  "fuck", "bitch", "cunt", "motherfucker", "asshole"
+];
+
+function containsProfanity(text: string): boolean {
+  if (!text) return false;
+  
+  // Normalize leetspeak and symbols
+  let normalized = text.toLowerCase()
+    .replace(/[0@]/g, "a")
+    .replace(/[1!]/g, "i")
+    .replace(/[3]/g, "e")
+    .replace(/[$]/g, "s")
+    .replace(/[5]/g, "s");
+
+  // 1. Check direct word matches (split by word boundaries / non-alphanumeric)
+  const words = normalized.split(/[^a-z0-9]+/);
+  for (const word of words) {
+    if (PROFANITY_WORDS.has(word)) {
+      return true;
+    }
+  }
+
+  // 2. Check for bypassed specific words
+  const stripped = normalized.replace(/[^a-z0-9]/g, "");
+  for (const badWord of SPECIFIC_PROFANITY_SUBSTRINGS) {
+    if (stripped.includes(badWord)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export default function CommentSection({ mangaId }: CommentSectionProps) {
   const router = useRouter();
   const { resolved } = useAppTheme();
   const isDark = resolved === "dark";
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 600;
 
   const colors = React.useMemo(
     () => ({
@@ -60,7 +104,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   const [page, setPage] = React.useState(1);
   const [lastPage, setLastPage] = React.useState(1);
   const [total, setTotal] = React.useState(0);
-  const [sort, setSort] = React.useState<"latest" | "popular">("latest");
+  const [sort, setSort] = React.useState<"latest" | "popular" | "oldest">("latest");
   const [commentText, setCommentText] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [loadingMore, setLoadingMore] = React.useState(false);
@@ -116,12 +160,13 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
 
         const res = await apiGetComments(mangaId, sort, pageNum);
 
-        setComments((prev) =>
-          isRefresh || pageNum === 1 ? res.data : [...prev, ...res.data]
-        );
+        setComments((prev) => {
+          const combined = isRefresh || pageNum === 1 ? res.data : [...prev, ...res.data];
+          return combined.slice(0, 100);
+        });
         setPage(res.current_page);
         setLastPage(res.last_page);
-        setTotal(res.total);
+        setTotal(Math.min(res.total, 100));
       } catch (e) {
         console.error("Failed to load comments:", e);
       } finally {
@@ -141,7 +186,16 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
 
   const handlePostComment = React.useCallback(async () => {
     const trimmed = commentText.trim();
-    if (!trimmed || trimmed.length > 200 || submitting) return;
+    if (!trimmed || trimmed.length > 100 || submitting) return;
+
+    if (containsProfanity(trimmed)) {
+      if (Platform.OS === "web") {
+        window.alert("Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.");
+      } else {
+        Alert.alert("Terjadi Kesalahan", "Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.");
+      }
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -202,11 +256,20 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       }
     }
 
-    if (actualLength > 200) {
+    if (actualLength > 100) {
       if (Platform.OS === "web") {
-        window.alert("Balasan tidak boleh lebih dari 200 karakter.");
+        window.alert("Balasan tidak boleh lebih dari 100 karakter.");
       } else {
-        Alert.alert("Terjadi Kesalahan", "Balasan tidak boleh lebih dari 200 karakter.");
+        Alert.alert("Terjadi Kesalahan", "Balasan tidak boleh lebih dari 100 karakter.");
+      }
+      return;
+    }
+
+    if (containsProfanity(trimmed)) {
+      if (Platform.OS === "web") {
+        window.alert("Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.");
+      } else {
+        Alert.alert("Terjadi Kesalahan", "Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.");
       }
       return;
     }
@@ -333,75 +396,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
     [profile, loadComments]
   );
 
-  const handleReport = React.useCallback(
-    async (commentId: number) => {
-      if (!profile) {
-        if (Platform.OS === "web") {
-          window.alert("Silakan login terlebih dahulu untuk melaporkan komentar.");
-        } else {
-          Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk melaporkan komentar.");
-        }
-        return;
-      }
 
-      const performReport = async () => {
-        try {
-          const res = await apiReportComment(commentId);
-          setComments((prev) =>
-            prev.map((c) => {
-              if (c.id === commentId) {
-                return { ...c, status: "reported" as const };
-              }
-              if (c.replies && c.replies.length > 0) {
-                return {
-                  ...c,
-                  replies: c.replies.map((r) => {
-                    if (r.id === commentId) {
-                      return { ...r, status: "reported" as const };
-                    }
-                    return r;
-                  }),
-                };
-              }
-              return c;
-            })
-          );
-          if (Platform.OS === "web") {
-            window.alert(res.message);
-          } else {
-            Alert.alert("Berhasil", res.message);
-          }
-        } catch (e: any) {
-          const msg = e instanceof Error ? e.message : "Gagal melaporkan komentar";
-          if (Platform.OS === "web") {
-            window.alert(msg);
-          } else {
-            Alert.alert("Terjadi Kesalahan", msg);
-          }
-        }
-      };
-
-      if (Platform.OS === "web") {
-        if (
-          window.confirm(
-            "Apakah kamu yakin ingin melaporkan komentar ini karena tidak pantas?"
-          )
-        ) {
-          void performReport();
-        }
-      } else {
-        Alert.alert(
-          "Laporkan Komentar",
-          "Apakah kamu yakin ingin melaporkan komentar ini karena tidak pantas?",
-          [
-            { text: "Batal", style: "cancel" },
-            { text: "Laporkan", style: "destructive", onPress: performReport },
-          ]
-        );
-      }
-    },
-    [profile]
-  );
 
   // ── Helper UI Functions ───────────────────────────────────────────────────
 
@@ -458,12 +453,21 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   };
 
   const inputCharCount = commentText.length;
-  const isInputOverLimit = inputCharCount > 200;
+  const isInputOverLimit = inputCharCount > 100;
 
   return (
     <View style={styles.container}>
       {/* Header & Sort Toggle */}
-      <View style={styles.headerRow}>
+      <View
+        style={[
+          styles.headerRow,
+          {
+            flexDirection: isSmallScreen ? "column" : "row",
+            alignItems: isSmallScreen ? "stretch" : "center",
+            gap: isSmallScreen ? 12 : 8,
+          }
+        ]}
+      >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           <Ionicons name="chatbubbles-outline" size={20} color={colors.text} />
           <Text style={[styles.titleText, { color: colors.text }]}>
@@ -471,13 +475,25 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
           </Text>
         </View>
 
-        <View style={styles.sortToggleContainer}>
-          {(["latest", "popular"] as const).map((mode) => (
+        <View
+          style={[
+            styles.sortToggleContainer,
+            {
+              alignSelf: isSmallScreen ? "stretch" : "auto",
+            }
+          ]}
+        >
+          {[
+            { mode: "latest" as const, label: "Terbaru" },
+            { mode: "oldest" as const, label: "Terlama" },
+            { mode: "popular" as const, label: "Terpopuler" },
+          ].map(({ mode, label }) => (
             <Pressable
               key={mode}
               onPress={() => setSort(mode)}
               style={[
                 styles.sortButton,
+                { flex: isSmallScreen ? 1 : undefined, alignItems: "center" },
                 sort === mode && { backgroundColor: colors.button },
               ]}
             >
@@ -487,7 +503,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                   { color: sort === mode ? colors.buttonText : colors.subtext },
                 ]}
               >
-                {mode === "latest" ? "Terbaru" : "Terpopuler"}
+                {label}
               </Text>
             </Pressable>
           ))}
@@ -515,7 +531,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                 placeholder="Tulis pendapatmu tentang komik ini..."
                 placeholderTextColor={colors.placeholder}
                 multiline
-                maxLength={250} // Sedikit buffer untuk input
+                maxLength={100}
                 style={[styles.textInput, { color: colors.inputText }]}
               />
 
@@ -524,15 +540,15 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                   style={[
                     styles.charCounter,
                     {
-                      color: isInputOverLimit
+                      color: inputCharCount > 100
                         ? colors.danger
-                        : inputCharCount > 180
+                        : inputCharCount > 90
                         ? "#FFA500"
                         : colors.subtext,
                     },
                   ]}
                 >
-                  {inputCharCount}/200
+                  {inputCharCount}/100
                 </Text>
 
                 <Pressable
@@ -634,25 +650,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                       </View>
                     </View>
 
-                    {/* Report Action Button */}
-                    {item.status === "reported" ? (
-                      <View style={styles.reportedIndicator}>
-                        <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
-                        <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
-                          Dilaporkan
-                        </Text>
-                      </View>
-                    ) : (
-                      <Pressable
-                        onPress={() => handleReport(item.id)}
-                        style={({ pressed }) => [
-                          styles.reportButton,
-                          { opacity: pressed ? 0.6 : 1 },
-                        ]}
-                      >
-                        <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
-                      </Pressable>
-                    )}
+                    {/* Report Action Button ditiadakan */}
                   </View>
 
                   <Text style={[styles.commentContentText, { color: colors.text }]}>
@@ -771,25 +769,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                               </View>
                             </View>
 
-                            {/* Report Action Button */}
-                            {reply.status === "reported" ? (
-                              <View style={styles.reportedIndicator}>
-                                <Ionicons name="alert-circle-outline" size={13} color={colors.danger} />
-                                <Text style={[styles.reportedIndicatorText, { color: colors.danger }]}>
-                                  Dilaporkan
-                                </Text>
-                              </View>
-                            ) : (
-                              <Pressable
-                                onPress={() => handleReport(reply.id)}
-                                style={({ pressed }) => [
-                                  styles.reportButton,
-                                  { opacity: pressed ? 0.6 : 1 },
-                                ]}
-                              >
-                                <Ionicons name="flag-outline" size={16} color={colors.placeholder} />
-                              </Pressable>
-                            )}
+                            {/* Report Action Button ditiadakan */}
                           </View>
 
                           <Text style={[styles.commentContentText, { color: colors.text }]}>
@@ -869,7 +849,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                               placeholder="Tulis balasan..."
                               placeholderTextColor={colors.placeholder}
                               multiline
-                              maxLength={250}
+                              maxLength={100}
                               style={[styles.textInput, { color: colors.inputText }]}
                               autoFocus
                             />
@@ -878,15 +858,15 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                                 style={[
                                   styles.charCounter,
                                   {
-                                    color: replyCharCount > 200
+                                    color: replyCharCount > 100
                                       ? colors.danger
-                                      : replyCharCount > 180
+                                      : replyCharCount > 90
                                       ? "#FFA500"
                                       : colors.subtext,
                                   },
                                 ]}
                               >
-                                {replyCharCount}/200
+                                {replyCharCount}/100
                               </Text>
                               <View style={{ flexDirection: "row", gap: 8 }}>
                                 <Pressable
@@ -897,12 +877,12 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                                 </Pressable>
                                 <Pressable
                                   onPress={() => handlePostReply(item.id)}
-                                  disabled={!replyText.trim() || replyCharCount > 200 || submittingReply}
+                                  disabled={!replyText.trim() || replyCharCount > 100 || submittingReply}
                                   style={({ pressed }) => [
                                     styles.sendButton,
                                     {
                                       backgroundColor:
-                                        !replyText.trim() || replyCharCount > 200
+                                        !replyText.trim() || replyCharCount > 100
                                           ? colors.chip
                                           : colors.accent,
                                       opacity: pressed ? 0.8 : 1,
@@ -928,7 +908,7 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
           })}
 
           {/* Load More Button */}
-          {page < lastPage && (
+          {page < lastPage && comments.length < 100 ? (
             <Pressable
               onPress={() => void loadComments(page + 1)}
               disabled={loadingMore}
@@ -949,6 +929,12 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                 </Text>
               )}
             </Pressable>
+          ) : (
+            comments.length >= 100 && (
+              <Text style={{ textAlign: "center", color: colors.subtext, fontSize: 12, marginTop: 10 }}>
+                *Maksimal 100 komentar yang ditampilkan
+              </Text>
+            )
           )}
         </View>
       )}

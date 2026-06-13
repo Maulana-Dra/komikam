@@ -32,13 +32,23 @@ class CommentController extends Controller
         ->where('manga_id', $mangaId)
         ->where('status', '!=', 'deleted');
 
+        // Filter by chapter_id jika disediakan
+        if ($request->query('chapter_id')) {
+            $commentsQuery->where('chapter_id', $request->query('chapter_id'));
+        } else {
+            // Tampilkan komentar level manga (tanpa chapter_id) jika tidak ada filter
+            $commentsQuery->whereNull('chapter_id');
+        }
+
         if ($request->query('sort') === 'popular') {
             $commentsQuery->orderByDesc('likes_count')->orderByDesc('created_at');
+        } elseif ($request->query('sort') === 'oldest') {
+            $commentsQuery->orderBy('created_at');
         } else {
             $commentsQuery->orderByDesc('created_at');
         }
 
-        $paginator = $commentsQuery->paginate(10);
+        $paginator = $commentsQuery->paginate(15);
 
         // Map data to append user liked status and custom formatted fields
         $items = $paginator->getCollection()->map(function ($comment) use ($userId) {
@@ -104,15 +114,26 @@ class CommentController extends Controller
     public function store(Request $request, string $mangaId): JsonResponse
     {
         $data = $request->validate([
-            'content' => ['required', 'string', 'min:1', 'max:200'],
+            'content'    => ['required', 'string', 'min:1', 'max:100'],
+            'chapter_id' => ['nullable', 'string', 'max:100'],
         ]);
 
+        if ($this->containsProfanity($data['content'])) {
+            return response()->json([
+                'message' => 'Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.',
+                'errors' => [
+                    'content' => ['Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.']
+                ]
+            ], 422);
+        }
+
         $comment = Comment::create([
-            'user_id' => $request->user()->id,
-            'parent_id' => null,
-            'manga_id' => $mangaId,
-            'content' => $data['content'],
-            'status' => 'active',
+            'user_id'    => $request->user()->id,
+            'parent_id'  => null,
+            'manga_id'   => $mangaId,
+            'chapter_id' => $data['chapter_id'] ?? null,
+            'content'    => $data['content'],
+            'status'     => 'active',
         ]);
 
         $comment->load('user');
@@ -171,11 +192,20 @@ class CommentController extends Controller
             }
         }
 
-        if ($validationLength > 200) {
+        if ($validationLength > 100) {
             return response()->json([
-                'message' => 'Balasan tidak boleh lebih dari 200 karakter.',
+                'message' => 'Balasan tidak boleh lebih dari 100 karakter.',
                 'errors' => [
-                    'content' => ['Balasan tidak boleh lebih dari 200 karakter.']
+                    'content' => ['Balasan tidak boleh lebih dari 100 karakter.']
+                ]
+            ], 422);
+        }
+
+        if ($this->containsProfanity($content)) {
+            return response()->json([
+                'message' => 'Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.',
+                'errors' => [
+                    'content' => ['Pesan Anda mengandung kata-kata kasar yang tidak diperbolehkan.']
                 ]
             ], 422);
         }
@@ -251,21 +281,47 @@ class CommentController extends Controller
     }
 
     /**
-     * POST /api/comments/{commentId}/report
-     * Report a comment.
+     * Check if text contains profanity in Indonesian or English.
      */
-    public function report(Request $request, int $commentId): JsonResponse
+    private function containsProfanity(?string $text): bool
     {
-        $comment = Comment::where('status', '!=', 'deleted')->find($commentId);
-        if (!$comment) {
-            return response()->json(['message' => 'Komentar tidak ditemukan.'], 404);
+        if (empty($text)) {
+            return false;
         }
 
-        $comment->update(['status' => 'reported']);
+        $profanityWords = [
+            'anjing', 'babi', 'bangsat', 'bajingan', 'kontol', 'memek', 'pepek', 'ngentot', 'ngewe', 'pantek', 'perek', 'lonte', 'jembut', 'goblok', 'tolol', 'peler', 'itil', 'coli', 'asu', 'keparat', 'brengsek', 'pejuh',
+            'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'bastard', 'dick', 'pussy', 'slut', 'whore', 'motherfucker'
+        ];
 
-        return response()->json([
-            'message' => 'Komentar telah dilaporkan.',
-            'status' => 'reported',
-        ]);
+        $specificSubstrings = [
+            'anjing', 'kontol', 'memek', 'ngentot', 'ngewe', 'bajingan', 'goblok', 'tolol', 'jembut', 'lonte',
+            'fuck', 'bitch', 'cunt', 'motherfucker', 'asshole'
+        ];
+
+        $normalized = strtolower($text);
+        $normalized = str_replace(['0', '@'], 'a', $normalized);
+        $normalized = str_replace(['1', '!'], 'i', $normalized);
+        $normalized = str_replace('3', 'e', $normalized);
+        $normalized = str_replace('$', 's', $normalized);
+        $normalized = str_replace('5', 's', $normalized);
+
+        // 1. Check direct word matches
+        $words = preg_split('/[^a-z0-9]+/', $normalized);
+        foreach ($words as $word) {
+            if (in_array($word, $profanityWords)) {
+                return true;
+            }
+        }
+
+        // 2. Check for bypassed specific words
+        $stripped = preg_replace('/[^a-z0-9]/', '', $normalized);
+        foreach ($specificSubstrings as $badWord) {
+            if (strpos($stripped, $badWord) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

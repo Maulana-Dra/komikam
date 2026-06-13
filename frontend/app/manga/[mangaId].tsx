@@ -530,28 +530,6 @@ export default function MangaDetailScreen() {
     return copy;
   }, [state.chapters, state.allChapters, sortDir, searchQuery]);
 
-  const jumpIndex = React.useMemo(() => {
-    if (orderedChapters.length === 0) return 0;
-    
-    if (resume) {
-      const idx = orderedChapters.findIndex((c) => c.chapter_number === resume.chapterNumber);
-      if (idx >= 0) return idx;
-    }
-
-    let maxNum = -Infinity;
-    let minNum = Infinity;
-    for (const ch of orderedChapters) {
-      const num = typeof ch.chapter_number === "number" ? ch.chapter_number : 0;
-      if (num > maxNum) maxNum = num;
-      if (num < minNum) minNum = num;
-    }
-    const targetNum = sortDir === "desc" ? maxNum : minNum;
-    const idx = orderedChapters.findIndex((c) => {
-      const num = typeof c.chapter_number === "number" ? c.chapter_number : 0;
-      return num === targetNum;
-    });
-    return idx >= 0 ? idx : 0;
-  }, [orderedChapters, sortDir, resume]);
   const listRef = React.useRef<FlatList<ShngmChapter>>(null);
 
   const resumeCta = resume ? (
@@ -1135,7 +1113,7 @@ export default function MangaDetailScreen() {
           style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 22 }}
         />
 
-        {/* ── Chapter List Header Row (Chapter, Awal, Jump, Sort) ── */}
+        {/* ── Chapter List Header Row (Chapter, Awal, Sort) ── */}
         <View
           style={{
             flexDirection: "row",
@@ -1176,34 +1154,6 @@ export default function MangaDetailScreen() {
             >
               <IconSymbol name="book.fill" size={14} color={colors.subtext} />
               <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>Awal</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                listRef.current?.scrollToIndex({
-                  index: jumpIndex,
-                  animated: true,
-                });
-              }}
-              style={{
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-                borderRadius: 999,
-                backgroundColor: colors.chip,
-                borderWidth: 1,
-                borderColor: colors.border,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <IconSymbol
-                name="arrow.up.to.line"
-                size={14}
-                color={colors.subtext}
-              />
-              <Text style={{ color: colors.subtext, fontWeight: "800", fontSize: 12 }}>
-                Naik
-              </Text>
             </Pressable>
             <Pressable
               onPress={() => {

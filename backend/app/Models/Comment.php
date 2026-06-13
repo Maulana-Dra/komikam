@@ -13,6 +13,7 @@ class Comment extends Model
         'parent_id',
         'reply_to_user_id',
         'manga_id',
+        'chapter_id',
         'content',
         'status',
     ];

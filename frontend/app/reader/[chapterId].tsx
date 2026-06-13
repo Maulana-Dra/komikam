@@ -36,6 +36,7 @@ import {
 } from "../../src/store/readerSettings";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import AnimatedReanimated, { useSharedValue, useAnimatedStyle, withTiming, runOnJS } from "react-native-reanimated";
+import ChapterCommentSection from "../../components/manga/ChapterCommentSection";
 
 function joinUrl(base: string, path: string, filename: string) {
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
@@ -323,6 +324,7 @@ export default function ReaderScreen() {
   const settingsAnim = React.useRef(new Animated.Value(0)).current;
   const [chapterListVisible, setChapterListVisible] = React.useState(false);
   const chapterListAnim = React.useRef(new Animated.Value(0)).current;
+
   const [chapters, setChapters] = React.useState<ShngmChapter[]>([]);
 
   React.useEffect(() => {
@@ -356,6 +358,8 @@ export default function ReaderScreen() {
       useNativeDriver: true,
     }).start();
   }, [chapterListVisible, chapterListAnim]);
+
+
 
   // Load chapter list when mangaId is known
   React.useEffect(() => {
@@ -658,33 +662,99 @@ export default function ReaderScreen() {
     }
   ).current;
 
-  const handleEndReached = React.useCallback(() => {
-    if (loadingNext || !nextId) return;
-    setLoadingNext(true);
-    setTimeout(() => {
-      router.replace({
-        pathname: "/reader/[chapterId]",
-        params: { chapterId: nextId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
-      });
-    }, 600);
-  }, [loadingNext, nextId, safeTitle, safeCoverUrl, router, mangaId]);
-
   const renderFooter = React.useCallback(() => {
     const pageBgColor = settings.readerBg === "white" ? "#FFF" : settings.readerBg === "dark" ? "#121218" : "#000";
-    if (!nextId) {
-      return (
-        <View style={{ paddingVertical: 40, alignItems: "center", justifyContent: "center", backgroundColor: pageBgColor }}>
-          <Text style={{ color: "rgba(242,242,247,0.4)", fontWeight: "700" }}>Akhir dari Manga ini</Text>
-        </View>
-      );
-    }
+    
     return (
-      <View style={{ paddingVertical: 40, alignItems: "center", justifyContent: "center", backgroundColor: pageBgColor, gap: 8 }}>
-        <ActivityIndicator color="#4A8FE2" />
-        <Text style={{ color: "#4A8FE2", fontWeight: "900" }}>Memuat Chapter Berikutnya...</Text>
+      <View style={{ backgroundColor: pageBgColor, paddingBottom: insets.bottom + 40 }}>
+        {/* Navigation Buttons Row */}
+        <View style={{ flexDirection: "row", gap: 10, paddingVertical: 12, width: contentWidth, alignSelf: "center", paddingHorizontal: 16, justifyContent: "center" }}>
+          {/* Prev Chapter Button */}
+          {!!prevId && (
+            <Pressable
+              onPress={() => {
+                router.replace({
+                  pathname: "/reader/[chapterId]",
+                  params: { chapterId: prevId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
+                });
+              }}
+              style={({ pressed }) => ({
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: settings.readerBg === "white" ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.08)",
+                borderWidth: 1,
+                borderColor: settings.readerBg === "white" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)",
+                paddingVertical: 10,
+                borderRadius: 10,
+                opacity: pressed ? 0.75 : 1,
+                gap: 6,
+                maxWidth: 160,
+              })}
+            >
+              <Ionicons name="arrow-back" size={16} color={colors.text} />
+              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+                Sebelumnya
+              </Text>
+            </Pressable>
+          )}
+
+          {/* Next Chapter Button */}
+          {!!nextId && (
+            <Pressable
+              onPress={() => {
+                router.replace({
+                  pathname: "/reader/[chapterId]",
+                  params: { chapterId: nextId, mangaTitle: safeTitle, coverUrl: safeCoverUrl, mangaId: mangaId },
+                });
+              }}
+              style={({ pressed }) => ({
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "#4A8FE2",
+                paddingVertical: 10,
+                borderRadius: 10,
+                opacity: pressed ? 0.85 : 1,
+                gap: 6,
+                maxWidth: 160,
+              })}
+            >
+              <Text style={{ color: "#FFF", fontWeight: "900", fontSize: 13 }}>
+                Selanjutnya
+              </Text>
+              <Ionicons name="arrow-forward" size={16} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* If no next chapter, show indicator */}
+        {!nextId && (
+          <View style={{ paddingVertical: 15, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: settings.readerBg === "white" ? "rgba(0,0,0,0.4)" : "rgba(242,242,247,0.4)", fontWeight: "700" }}>Akhir dari Manga ini</Text>
+          </View>
+        )}
+
+        {/* Divider */}
+        <View style={{ height: 1, backgroundColor: settings.readerBg === "white" ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)", marginVertical: 20, width: contentWidth, alignSelf: "center" }} />
+
+        {/* Comment Section Container */}
+        <View style={{ width: contentWidth, alignSelf: "center", paddingHorizontal: isDesktop ? 0 : 16 }}>
+          {mangaId && id ? (
+            <ChapterCommentSection
+              mangaId={mangaId}
+              chapterId={id}
+              chapterNumber={chapterNumber || undefined}
+              isNested={true}
+              readerBg={settings.readerBg}
+            />
+          ) : null}
+        </View>
       </View>
     );
-  }, [nextId, settings.readerBg]);
+  }, [nextId, prevId, settings.readerBg, mangaId, id, chapterNumber, safeTitle, safeCoverUrl, insets.bottom, router, contentWidth, colors.text, isDesktop]);
 
   const handleToggleControls = React.useCallback(() => {
     setControlsVisible((v) => !v);
@@ -765,7 +835,7 @@ export default function ReaderScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color="#F2F2F7" />
-        <Text style={{ marginTop: 8, color: "#B3B3C2" }}>Loading chapter...</Text>
+        <Text style={{ marginTop: 8, color: "#B3B3C2" }}>Memuat chapter...</Text>
       </View>
     );
   }
@@ -786,7 +856,7 @@ export default function ReaderScreen() {
           onPress={() => void load()}
           style={{ paddingVertical: 12, paddingHorizontal: 14, backgroundColor: "#1A1A24", borderRadius: 12, alignSelf: "flex-start" }}
         >
-          <Text style={{ color: "#F2F2F7", fontWeight: "900" }}>Retry</Text>
+          <Text style={{ color: "#F2F2F7", fontWeight: "900" }}>Coba Lagi</Text>
         </Pressable>
       </View>
     );
@@ -926,8 +996,6 @@ export default function ReaderScreen() {
         initialNumToRender={3}
         windowSize={5}
         removeClippedSubviews
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.05}
         ListFooterComponent={renderFooter}
         onScrollToIndexFailed={onScrollToIndexFailed}
       />
@@ -974,13 +1042,13 @@ export default function ReaderScreen() {
             }}
           >
             <Pressable
-              onPress={() => scrollToIndex(Math.max(0, currentIndex - 1))}
+              onPress={() => scrollToIndex(0)}
               style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
             >
               <Ionicons name="chevron-up" size={ICON_SIZE} color={ICON_COLOR} />
             </Pressable>
             <Pressable
-              onPress={() => scrollToIndex(Math.min(totalPages - 1, currentIndex + 1))}
+              onPress={() => listRef.current?.scrollToEnd({ animated: true })}
               style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.7 : 1 })}
             >
               <Ionicons name="chevron-down" size={ICON_SIZE} color={ICON_COLOR} />
@@ -998,10 +1066,6 @@ export default function ReaderScreen() {
               zIndex: 8,
             }}
           >
-            {/* Page label */}
-            <Text style={{ color: "rgba(242,242,247,0.55)", fontSize: 11, marginBottom: 10, fontWeight: "700" }}>
-              {pageLabel}
-            </Text>
 
             {/* 4 box buttons row */}
             <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
@@ -1036,14 +1100,6 @@ export default function ReaderScreen() {
                 style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.6 : 1 })}
               >
                 <Ionicons name="list-outline" size={ICON_SIZE} color={ICON_COLOR} />
-              </Pressable>
-
-              {/* Refresh */}
-              <Pressable
-                onPress={() => void load()}
-                style={({ pressed }) => ({ ...BOX, opacity: pressed ? 0.6 : 1 })}
-              >
-                <Ionicons name="refresh-outline" size={ICON_SIZE} color={ICON_COLOR} />
               </Pressable>
 
               {/* Home */}
@@ -1191,7 +1247,7 @@ export default function ReaderScreen() {
                       }}
                     >
                       <Text style={{ color: settings.imageQuality === q ? "#0B0B0E" : "#B3B3C2", fontWeight: settings.imageQuality === q ? "900" : "600" }}>
-                        {q === "high" ? "High (HQ)" : "Low (Data Saver)"}
+                        {q === "high" ? "Tinggi (HQ)" : "Hemat Data"}
                       </Text>
                     </Pressable>
                   ))}
@@ -1227,6 +1283,7 @@ export default function ReaderScreen() {
           </Animated.View>
         </View>
       )}
+
     </GestureHandlerRootView>
   );
 }

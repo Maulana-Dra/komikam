@@ -239,6 +239,7 @@ export type ApiComment = {
   user_id: number;
   user_name: string;
   manga_id: string;
+  chapter_id?: string | null;
   content: string;
   status: "active" | "reported" | "deleted";
   likes_count: number;
@@ -261,12 +262,14 @@ export type PaginatedComments = {
 
 export async function apiGetComments(
   mangaId: string,
-  sort: "latest" | "popular" = "latest",
+  sort: "latest" | "popular" | "oldest" = "latest",
   page: number = 1,
+  chapterId?: string,
 ): Promise<PaginatedComments> {
+  const chapterParam = chapterId ? `&chapter_id=${encodeURIComponent(chapterId)}` : "";
   return request<PaginatedComments>(
     "GET",
-    `/comments/${encodeURIComponent(mangaId)}?sort=${sort}&page=${page}`,
+    `/comments/${encodeURIComponent(mangaId)}?sort=${sort}&page=${page}${chapterParam}`,
     undefined,
     false,
   );
@@ -275,8 +278,11 @@ export async function apiGetComments(
 export async function apiPostComment(
   mangaId: string,
   content: string,
+  chapterId?: string,
 ): Promise<{ message: string; comment: ApiComment }> {
-  return request("POST", `/comments/${encodeURIComponent(mangaId)}`, { content });
+  const body: Record<string, unknown> = { content };
+  if (chapterId) body.chapter_id = chapterId;
+  return request("POST", `/comments/${encodeURIComponent(mangaId)}`, body);
 }
 
 export async function apiPostReply(
