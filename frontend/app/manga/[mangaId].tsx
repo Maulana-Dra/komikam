@@ -795,7 +795,11 @@ export default function MangaDetailScreen() {
           contentFit="cover"
         />
         <LinearGradient
-          colors={["rgba(11,11,14,0.1)", "rgba(11,11,14,0.5)", "rgba(11,11,14,0.85)", "#0B0B0E"]}
+          colors={
+            isDark
+              ? ["rgba(11,11,14,0.1)", "rgba(11,11,14,0.5)", "rgba(11,11,14,0.85)", colors.bg]
+              : ["rgba(246,241,233,0.15)", "rgba(246,241,233,0.55)", "rgba(246,241,233,0.85)", colors.bg]
+          }
           style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
         />
         
@@ -872,10 +876,10 @@ export default function MangaDetailScreen() {
               style={{ 
                 fontSize: 24, 
                 fontWeight: "900", 
-                color: "#FFF", 
-                textShadowColor: "rgba(0,0,0,0.85)", 
-                textShadowOffset: { width: 0, height: 2 }, 
-                textShadowRadius: 4,
+                color: isDark ? "#FFF" : colors.text, 
+                textShadowColor: isDark ? "rgba(0,0,0,0.85)" : "transparent", 
+                textShadowOffset: isDark ? { width: 0, height: 2 } : { width: 0, height: 0 }, 
+                textShadowRadius: isDark ? 4 : 0,
                 textAlign: isWide ? "left" : "center"
               }}
               numberOfLines={2}
@@ -887,7 +891,7 @@ export default function MangaDetailScreen() {
                 style={{ 
                   fontSize: 13, 
                   fontWeight: "600", 
-                  color: "rgba(242,242,247,0.6)",
+                  color: isDark ? "rgba(255,255,255,0.7)" : colors.subtext,
                   textAlign: isWide ? "left" : "center" 
                 }} 
                 numberOfLines={1}
@@ -976,7 +980,7 @@ export default function MangaDetailScreen() {
               {stats.map((s, idx) => (
                 <View key={idx} style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
                   <Ionicons name={s.icon as any} size={21} color={s.color} />
-                  <Text style={{ color: "#F2F2F7", fontWeight: "700", fontSize: 15 }}>{s.value}</Text>
+                  <Text style={{ color: colors.text, fontWeight: "700", fontSize: 15 }}>{s.value}</Text>
                 </View>
               ))}
             </View>
@@ -1010,7 +1014,7 @@ export default function MangaDetailScreen() {
         {/* ── Description ── */}
         <View style={{ marginTop: 18 }}>
           <Text
-            style={{ color: "rgba(255,255,255,0.9)", lineHeight: 22, fontSize: 14 }}
+            style={{ color: colors.text, lineHeight: 22, fontSize: 14 }}
             numberOfLines={descExpanded ? 0 : 4}
           >
             {displayDescription}
@@ -1046,7 +1050,7 @@ export default function MangaDetailScreen() {
                 >
                   <Text
                     style={{
-                      color: "#FFF",
+                      color: colors.text,
                       fontWeight: "700",
                       fontSize: 15,
                       minWidth: isWide ? undefined : 75,
@@ -1068,17 +1072,17 @@ export default function MangaDetailScreen() {
                       <View
                         key={`${sec.key}-${itemIdx}`}
                         style={{
-                          backgroundColor: "#1A1A24",
+                          backgroundColor: colors.chip,
                           paddingVertical: 6,
                           paddingHorizontal: 12,
                           borderRadius: 8,
                           borderWidth: 1,
-                          borderColor: "rgba(255,255,255,0.08)",
+                          borderColor: colors.border,
                         }}
                       >
                         <Text
                           style={{
-                            color: "#B3B3C2",
+                            color: colors.subtext,
                             fontWeight: "600",
                             fontSize: 14,
                           }}
@@ -1092,7 +1096,7 @@ export default function MangaDetailScreen() {
                 {isWide && idx < metadataSections.length - 1 && (
                   <Text
                     style={{
-                      color: "rgba(255,255,255,0.25)",
+                      color: colors.border,
                       fontSize: 16,
                       marginHorizontal: 6,
                     }}
@@ -1110,7 +1114,7 @@ export default function MangaDetailScreen() {
           onLayout={(e) => {
             setChapterOffset(e.nativeEvent.layout.y);
           }}
-          style={{ height: 1, backgroundColor: "rgba(255,255,255,0.07)", marginTop: 22 }}
+          style={{ height: 1, backgroundColor: colors.border, marginTop: 22 }}
         />
 
         {/* ── Chapter List Header Row (Chapter, Awal, Sort) ── */}

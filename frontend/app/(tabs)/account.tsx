@@ -5,7 +5,6 @@ import {
   Alert,
   Platform,
   Pressable,
-  Share,
   TextInput,
   View,
   ScrollView,
@@ -31,7 +30,6 @@ import { KomikamApiError } from "@/src/api/komikamApi";
 import { router } from "expo-router";
 import { getAllHistory } from "@/src/store/history";
 import { getBookmarks } from "@/src/store/bookmarks";
-import { clearCrashLog, getCrashLogText } from "@/src/utils/crashLogger";
 
 type AuthMode = "login" | "register";
 
@@ -221,41 +219,7 @@ export default function AccountScreen() {
     setSubmitting(false);
   }, [setHistoryCount, setBookmarkCount, setLatestProgress]);
 
-  const handleViewCrashLog = React.useCallback(async () => {
-    const log = await getCrashLogText();
-    const text = log.trim() || "Belum ada log error.";
-    const preview =
-      text.length > 3500
-        ? `${text.slice(text.length - 3500)}\n\n(Log dipotong, gunakan Bagikan Log untuk isi lengkap.)`
-        : text;
 
-    Alert.alert("Log Error", preview);
-  }, []);
-
-  const handleShareCrashLog = React.useCallback(async () => {
-    const log = await getCrashLogText();
-    await Share.share({
-      title: "ItzKomik crash-log.txt",
-      message: log.trim() || "Belum ada log error.",
-    });
-  }, []);
-
-  const handleClearCrashLog = React.useCallback(() => {
-    const clearLog = async () => {
-      await clearCrashLog();
-      showMessage("Log error dihapus.", false);
-    };
-
-    if (Platform.OS === "web") {
-      void clearLog();
-      return;
-    }
-
-    Alert.alert("Hapus log error?", "Log error yang tersimpan akan dihapus.", [
-      { text: "Batal", style: "cancel" },
-      { text: "Hapus", style: "destructive", onPress: clearLog },
-    ]);
-  }, []);
 
   // ── Loading State ─────────────────────────────────────────────────────────
   if (loading) {
@@ -667,58 +631,7 @@ export default function AccountScreen() {
             )}
           </View>
 
-          {/* Divider */}
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 2 }} />
 
-          <View style={{ gap: 12 }}>
-            <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>
-              Log Error
-            </Text>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <Pressable
-                onPress={handleViewCrashLog}
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: "800" }}>Lihat</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleShareCrashLog}
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: "800" }}>Bagikan</Text>
-              </Pressable>
-              <Pressable
-                onPress={handleClearCrashLog}
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.card,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: colors.danger, fontWeight: "800" }}>Hapus</Text>
-              </Pressable>
-            </View>
-          </View>
 
           {/* Divider */}
           <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 2 }} />

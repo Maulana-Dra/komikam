@@ -18,7 +18,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
-import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getChapterDetail, getChapterList, getMangaDetail } from "../../src/api/shngmClient";
 import type { 
   ShngmChapter,
@@ -267,25 +266,10 @@ export default function ReaderScreen() {
   const safeTitle = typeof mangaTitle === "string" ? mangaTitle : "";
   const safeCoverUrl = typeof coverUrl === "string" ? coverUrl : "";
 
-  const { resolved } = useAppTheme();
-  const isDark = resolved === "dark";
   const insets = useSafeAreaInsets();
-  const colors = React.useMemo(
-    () => ({
-      bg: isDark ? "#0B0B0E" : "#F6F1E9",
-      text: isDark ? "#F2F2F7" : "#1E2329",
-      subtext: isDark ? "#B3B3C2" : "#6A625A",
-      border: isDark ? "#242434" : "#E6DED2",
-      header: isDark ? "#121218" : "#FBF6EE",
-      headerBtn: isDark ? "#1A1A24" : "#EFE6DA",
-      headerBtnText: isDark ? "#F2F2F7" : "#1E2329",
-    }),
-    [isDark],
-  );
-
   const { width: screenWidth } = useWindowDimensions();
   const isDesktop = screenWidth >= 1024; // Naikkan threshold ke 1024 agar tidak kena di HP high-res
-  const contentWidth = isDesktop ? Math.min(800, screenWidth * 0.8) : screenWidth;
+  const contentWidth = isDesktop ? Math.min(640, screenWidth * 0.65) : Math.min(screenWidth, 500);
 
   const [fetchedMangaTitle, setFetchedMangaTitle] = React.useState<string | null>(null);
   const [fetchedCoverUrl, setFetchedCoverUrl] = React.useState<string | null>(null);
@@ -663,7 +647,9 @@ export default function ReaderScreen() {
   ).current;
 
   const renderFooter = React.useCallback(() => {
-    const pageBgColor = settings.readerBg === "white" ? "#FFF" : settings.readerBg === "dark" ? "#121218" : "#000";
+    const isReaderWhite = settings.readerBg === "white";
+    const pageBgColor = isReaderWhite ? "#FFF" : settings.readerBg === "dark" ? "#121218" : "#000";
+    const prevBtnTextColor = isReaderWhite ? "#1E2329" : "#F2F2F7";
     
     return (
       <View style={{ backgroundColor: pageBgColor, paddingBottom: insets.bottom + 40 }}>
@@ -683,9 +669,9 @@ export default function ReaderScreen() {
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "center",
-                backgroundColor: settings.readerBg === "white" ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.08)",
+                backgroundColor: isReaderWhite ? "rgba(0,0,0,0.05)" : "rgba(255,255,255,0.08)",
                 borderWidth: 1,
-                borderColor: settings.readerBg === "white" ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)",
+                borderColor: isReaderWhite ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.12)",
                 paddingVertical: 10,
                 borderRadius: 10,
                 opacity: pressed ? 0.75 : 1,
@@ -693,8 +679,8 @@ export default function ReaderScreen() {
                 maxWidth: 160,
               })}
             >
-              <Ionicons name="arrow-back" size={16} color={colors.text} />
-              <Text style={{ color: colors.text, fontWeight: "900", fontSize: 13 }}>
+              <Ionicons name="arrow-back" size={16} color={prevBtnTextColor} />
+              <Text style={{ color: prevBtnTextColor, fontWeight: "900", fontSize: 13 }}>
                 Sebelumnya
               </Text>
             </Pressable>
@@ -754,7 +740,7 @@ export default function ReaderScreen() {
         </View>
       </View>
     );
-  }, [nextId, prevId, settings.readerBg, mangaId, id, chapterNumber, safeTitle, safeCoverUrl, insets.bottom, router, contentWidth, colors.text, isDesktop]);
+  }, [nextId, prevId, settings.readerBg, mangaId, id, chapterNumber, safeTitle, safeCoverUrl, insets.bottom, router, contentWidth, isDesktop]);
 
   const handleToggleControls = React.useCallback(() => {
     setControlsVisible((v) => !v);
