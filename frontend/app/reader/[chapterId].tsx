@@ -65,15 +65,12 @@ const SliderCustom = ({
   onChange: (val: number) => void;
   disabled?: boolean;
 }) => {
-  const [layoutX, setLayoutX] = React.useState(0);
   const [layoutWidth, setLayoutWidth] = React.useState(0);
-  const trackRef = React.useRef<View>(null);
 
   const handleTouch = (event: any) => {
     if (disabled || layoutWidth === 0) return;
-    const pageX = event.nativeEvent.pageX;
-    const relativeX = pageX - layoutX;
-    const percentage = Math.max(0, Math.min(1, relativeX / layoutWidth));
+    const locationX = event.nativeEvent.locationX;
+    const percentage = Math.max(0, Math.min(1, locationX / layoutWidth));
     const rawVal = min + percentage * (max - min);
     onChange(Math.round(rawVal));
   };
@@ -82,12 +79,8 @@ const SliderCustom = ({
 
   return (
     <View
-      ref={trackRef}
-      onLayout={() => {
-        trackRef.current?.measure((x, y, w, h, px, py) => {
-          if (px !== undefined) setLayoutX(px);
-          if (w !== undefined) setLayoutWidth(w);
-        });
+      onLayout={(e) => {
+        setLayoutWidth(e.nativeEvent.layout.width);
       }}
       onTouchStart={handleTouch}
       onTouchMove={handleTouch}
@@ -98,7 +91,10 @@ const SliderCustom = ({
         opacity: disabled ? 0.35 : 1,
       }}
     >
-      <View style={{ height: 6, borderRadius: 3, backgroundColor: "#1A1A24", position: "relative" }}>
+      <View 
+        pointerEvents="none"
+        style={{ height: 6, borderRadius: 3, backgroundColor: "#1A1A24", position: "relative" }}
+      >
         <View
           style={{
             height: "100%",
