@@ -66,24 +66,60 @@ const SliderCustom = ({
   disabled?: boolean;
 }) => {
   const [layoutWidth, setLayoutWidth] = React.useState(0);
+  const layoutXRef = React.useRef(0);
+  const layoutWidthRef = React.useRef(0);
+  const trackRef = React.useRef<View>(null);
 
-  const handleTouch = (event: any) => {
-    if (disabled || layoutWidth === 0) return;
-    const locationX = event.nativeEvent.locationX;
-    const percentage = Math.max(0, Math.min(1, locationX / layoutWidth));
+  const updateValue = (pageX: number) => {
+    const width = layoutWidthRef.current || layoutWidth;
+    if (width === 0) return;
+    const relativeX = pageX - layoutXRef.current;
+    const percentage = Math.max(0, Math.min(1, relativeX / width));
     const rawVal = min + percentage * (max - min);
     onChange(Math.round(rawVal));
   };
+
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        if (disabled) return;
+        trackRef.current?.measureInWindow((x, y, w, h) => {
+          if (x !== undefined && x !== null) {
+            layoutXRef.current = x;
+          }
+          if (w !== undefined && w !== null) {
+            layoutWidthRef.current = w;
+            setLayoutWidth(w);
+          }
+          updateValue(gestureState.x0);
+        });
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (disabled) return;
+        updateValue(gestureState.moveX);
+      },
+    })
+  ).current;
 
   const percentage = (value - min) / (max - min);
 
   return (
     <View
-      onLayout={(e) => {
-        setLayoutWidth(e.nativeEvent.layout.width);
+      ref={trackRef}
+      onLayout={() => {
+        trackRef.current?.measureInWindow((x, y, w, h) => {
+          if (x !== undefined && x !== null) {
+            layoutXRef.current = x;
+          }
+          if (w !== undefined && w !== null) {
+            layoutWidthRef.current = w;
+            setLayoutWidth(w);
+          }
+        });
       }}
-      onTouchStart={handleTouch}
-      onTouchMove={handleTouch}
+      {...panResponder.panHandlers}
       style={{
         height: 40,
         justifyContent: "center",
@@ -1301,7 +1337,7 @@ export default function ReaderScreen() {
               {/* Fit To Width (Otomatis) */}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View>
-                  <Text style={{ color: "#F2F2F7", fontWeight: "700" }}>Fit To Width (Otomatis)</Text>
+                  <Text style={{ color: "#F2F2F7", fontWeight: "700" }}>Sesuaikan dengan lebar (Otomatis)</Text>
                   <Text style={{ color: "#B3B3C2", fontSize: 12 }}>Menyesuaikan gambar ke lebar layar default</Text>
                 </View>
                 <Pressable
