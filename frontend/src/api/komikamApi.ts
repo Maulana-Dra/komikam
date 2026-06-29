@@ -72,11 +72,8 @@ async function request<T>(
     const msg: string =
       (json as { message?: string }).message ?? `HTTP ${res.status}`;
 
-    // LOG DEBUG: Cetak detail error ke terminal untuk analisa
-    console.log(`[API ERROR] ${method} ${path} -> Status: ${res.status}, Message: ${msg}`);
-    if (res.status === 403) {
-      console.log("[DEBUG 403] Isi response body:", JSON.stringify(json));
-    }
+    // Treat 401 dari backend sama dengan tidak login (token expired/invalid)
+    if (res.status === 401) throw new KomikamAuthError();
 
     throw new KomikamApiError(res.status, msg);
   }

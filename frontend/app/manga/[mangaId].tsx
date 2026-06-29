@@ -203,6 +203,12 @@ export default function MangaDetailScreen() {
   const handleDownload = React.useCallback(async (chapterId: string) => {
     if (!id || Platform.OS === 'web') return;
 
+    const token = await getToken();
+    if (!token) {
+      Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk mengunduh chapter.");
+      return;
+    }
+
     const isDownloaded = downloadedChapters[chapterId];
 
     if (isDownloaded) {
@@ -954,6 +960,15 @@ export default function MangaDetailScreen() {
             <Pressable
               onPress={async () => {
                 if (!id) return;
+                const token = await getToken();
+                if (!token) {
+                  if (Platform.OS === "web") {
+                    window.alert("Silakan login terlebih dahulu untuk menggunakan fitur Bookmark.");
+                  } else {
+                    Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk menggunakan fitur Bookmark.");
+                  }
+                  return;
+                }
                 const cover = displayCover;
                 const next = await toggleBookmark({
                   mangaId: id,

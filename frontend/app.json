@@ -11,12 +11,11 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {
+    "android": { 
+      "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#18181b"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -50,9 +49,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f9f81186-6f8a-4fcf-8f30-308ee27b7948"
+        "projectId": "82176666-6654-43ca-90ce-9ef2c9cd2b95"
       }
     },
-    "owner": "the_l"
+    "owner": "barasp"
   }
 }

@@ -12,9 +12,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
+      }, 
       "env": {
-        "EXPO_PUBLIC_KOMIKAM_API_URL": "https://sir-l.web.id"
+        "EXPO_PUBLIC_KOMIKAM_API_URL": "https://komikam.sir-l.web.id"
       }
     },
     "production": {

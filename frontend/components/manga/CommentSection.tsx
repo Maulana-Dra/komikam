@@ -15,6 +15,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
 import { getProfile, type AccountProfile } from "@/src/store/account";
+import { getToken } from "@/src/store/authToken";
 import {
   apiGetComments,
   apiPostComment,
@@ -187,6 +188,16 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   const handlePostComment = React.useCallback(async () => {
     const trimmed = commentText.trim();
     if (!trimmed || trimmed.length > 100 || submitting) return;
+
+    const token = await getToken();
+    if (!token) {
+      if (Platform.OS === "web") {
+        window.alert("Silakan login terlebih dahulu untuk menulis komentar.");
+      } else {
+        Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk menulis komentar.");
+      }
+      return;
+    }
 
     if (containsProfanity(trimmed)) {
       if (Platform.OS === "web") {
