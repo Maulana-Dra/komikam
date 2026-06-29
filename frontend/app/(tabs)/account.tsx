@@ -76,6 +76,8 @@ export default function AccountScreen() {
     imageQuality: "high",
     readerBg: "black",
     readingMode: "scroll",
+    imageWidth: 100,
+    fitToWidth: true,
   });
   const [focusedField, setFocusedField] = React.useState<"name" | "email" | "password" | null>(null);
   const [secureTextEntry, setSecureTextEntry] = React.useState(true);

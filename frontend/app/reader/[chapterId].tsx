@@ -52,6 +52,85 @@ type PageItem = {
 
 const sizeCache = new Map<string, number>();
 
+const SliderCustom = ({
+  value,
+  min = 30,
+  max = 100,
+  onChange,
+  disabled = false,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (val: number) => void;
+  disabled?: boolean;
+}) => {
+  const [layoutX, setLayoutX] = React.useState(0);
+  const [layoutWidth, setLayoutWidth] = React.useState(0);
+  const trackRef = React.useRef<View>(null);
+
+  const handleTouch = (event: any) => {
+    if (disabled || layoutWidth === 0) return;
+    const pageX = event.nativeEvent.pageX;
+    const relativeX = pageX - layoutX;
+    const percentage = Math.max(0, Math.min(1, relativeX / layoutWidth));
+    const rawVal = min + percentage * (max - min);
+    onChange(Math.round(rawVal));
+  };
+
+  const percentage = (value - min) / (max - min);
+
+  return (
+    <View
+      ref={trackRef}
+      onLayout={() => {
+        trackRef.current?.measure((x, y, w, h, px, py) => {
+          if (px !== undefined) setLayoutX(px);
+          if (w !== undefined) setLayoutWidth(w);
+        });
+      }}
+      onTouchStart={handleTouch}
+      onTouchMove={handleTouch}
+      style={{
+        height: 40,
+        justifyContent: "center",
+        width: "100%",
+        opacity: disabled ? 0.35 : 1,
+      }}
+    >
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: "#1A1A24", position: "relative" }}>
+        <View
+          style={{
+            height: "100%",
+            width: `${percentage * 100}%`,
+            borderRadius: 3,
+            backgroundColor: "#4A8FE2",
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            top: -6,
+            left: `${percentage * 100}%`,
+            marginLeft: -9,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: "#F2F2F7",
+            borderWidth: 2,
+            borderColor: "#4A8FE2",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.3,
+            shadowRadius: 2,
+            elevation: 3,
+          }}
+        />
+      </View>
+    </View>
+  );
+};
+
 function PageImage({
   uri,
   onSingleTap,
@@ -267,9 +346,6 @@ export default function ReaderScreen() {
   const safeCoverUrl = typeof coverUrl === "string" ? coverUrl : "";
 
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
-  const isDesktop = screenWidth >= 1024; // Naikkan threshold ke 1024 agar tidak kena di HP high-res
-  const contentWidth = isDesktop ? Math.min(640, screenWidth * 0.65) : Math.min(screenWidth, 500);
 
   const [fetchedMangaTitle, setFetchedMangaTitle] = React.useState<string | null>(null);
   const [fetchedCoverUrl, setFetchedCoverUrl] = React.useState<string | null>(null);
@@ -303,7 +379,14 @@ export default function ReaderScreen() {
     imageQuality: "high",
     readerBg: "black",
     readingMode: "scroll",
+    imageWidth: 100,
+    fitToWidth: true,
   });
+
+  const { width: screenWidth } = useWindowDimensions();
+  const isDesktop = screenWidth >= 1024; // Naikkan threshold ke 1024 agar tidak kena di HP high-res
+  const defaultWidth = isDesktop ? Math.min(640, screenWidth * 0.65) : Math.min(screenWidth, 500);
+  const contentWidth = settings.fitToWidth ? defaultWidth : (screenWidth * (settings.imageWidth / 100));
   const [settingsVisible, setSettingsVisible] = React.useState(false);
   const settingsAnim = React.useRef(new Animated.Value(0)).current;
   const [chapterListVisible, setChapterListVisible] = React.useState(false);
@@ -1209,7 +1292,7 @@ export default function ReaderScreen() {
               borderTopLeftRadius: 20, borderTopRightRadius: 20,
               padding: 20, paddingBottom: insets.bottom + 20,
               borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
-              transform: [{ translateY: settingsAnim.interpolate({ inputRange: [0, 1], outputRange: [320, 0] }) }],
+              transform: [{ translateY: settingsAnim.interpolate({ inputRange: [0, 1], outputRange: [420, 0] }) }],
             }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -1219,25 +1302,64 @@ export default function ReaderScreen() {
               </Pressable>
             </View>
             <View style={{ gap: 20 }}>
-              {/* Image Quality */}
-              <View>
-                <Text style={{ color: "#F2F2F7", fontWeight: "700", marginBottom: 10 }}>Kualitas Gambar</Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  {(["high", "low"] as const).map((q) => (
-                    <Pressable
-                      key={q}
-                      onPress={() => updateSetting({ imageQuality: q })}
-                      style={{
-                        flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 10,
-                        backgroundColor: settings.imageQuality === q ? "#F2F2F7" : "#1A1A24",
-                      }}
-                    >
-                      <Text style={{ color: settings.imageQuality === q ? "#0B0B0E" : "#B3B3C2", fontWeight: settings.imageQuality === q ? "900" : "600" }}>
-                        {q === "high" ? "Tinggi (HQ)" : "Hemat Data"}
-                      </Text>
-                    </Pressable>
-                  ))}
+              {/* Fit To Width (Otomatis) */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View>
+                  <Text style={{ color: "#F2F2F7", fontWeight: "700" }}>Fit To Width (Otomatis)</Text>
+                  <Text style={{ color: "#B3B3C2", fontSize: 12 }}>Menyesuaikan gambar ke lebar layar default</Text>
                 </View>
+                <Pressable
+                  onPress={() => {
+                    const nextFit = !settings.fitToWidth;
+                    updateSetting({
+                      fitToWidth: nextFit,
+                      imageWidth: nextFit ? 100 : settings.imageWidth,
+                    });
+                  }}
+                  style={{
+                    width: 50,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: settings.fitToWidth ? "#4A8FE2" : "#1A1A24",
+                    padding: 2,
+                    justifyContent: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 12,
+                      backgroundColor: "#FFF",
+                      alignSelf: settings.fitToWidth ? "flex-end" : "flex-start",
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 2,
+                      elevation: 2,
+                    }}
+                  />
+                </Pressable>
+              </View>
+
+              {/* Image Width (Slider) */}
+              <View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+                  <Text style={{ color: "#F2F2F7", fontWeight: "700" }}>Lebar Gambar (Image Width)</Text>
+                  <Text style={{ color: "#4A8FE2", fontWeight: "800", fontSize: 13 }}>
+                    {settings.fitToWidth ? "Default (Otomatis)" : `${settings.imageWidth}%`}
+                  </Text>
+                </View>
+                <SliderCustom
+                  value={settings.imageWidth}
+                  onChange={(val) => {
+                    updateSetting({
+                      imageWidth: val,
+                      fitToWidth: false,
+                    });
+                  }}
+                  disabled={settings.fitToWidth}
+                />
               </View>
               {/* Background */}
               <View>
