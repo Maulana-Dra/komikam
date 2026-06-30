@@ -459,13 +459,10 @@ export default function HomeScreen() {
       if (nextPage === 0) return;
 
       try {
+        // Search loadMore: tanpa type agar hasilnya tidak dibatasi tab
         const res = await getMangaListByType({
-          type: active,
           page: nextPage,
-          pageSize: PAGE_SIZE,
-          isUpdate: true,
-          sort: "latest",
-          sortOrder: "desc",
+          pageSize: 20,
           query: q,
         });
 
@@ -571,7 +568,13 @@ export default function HomeScreen() {
 
 
   const isSearching = debouncedQuery.trim().length > 0;
-  const filtered = isSearching ? searchFeed.items : activeFeed.items;
+  const filtered = React.useMemo(() => {
+    if (!isSearching) return activeFeed.items;
+    const q = debouncedQuery.trim().toLowerCase();
+    return searchFeed.items.filter((item) => {
+      return item.title?.toLowerCase().includes(q);
+    });
+  }, [isSearching, searchFeed.items, activeFeed.items, debouncedQuery]);
   const hero = filtered.slice(0, 3);
 
   const numColumns = isGrid ? (isDesktop ? (width >= 1024 ? 6 : 4) : 2) : 1;
@@ -630,14 +633,11 @@ export default function HomeScreen() {
 
     (async () => {
       try {
+        // Saat search: hapus type agar mencari semua manga (bukan hanya tab aktif)
         const res = await getMangaListByType(
           {
-            type: active,
             page: 1,
-            pageSize: PAGE_SIZE,
-            isUpdate: true,
-            sort: "latest",
-            sortOrder: "desc",
+            pageSize: 30,
             query: q,
           },
           { cacheMode: "no-cache" },
@@ -671,7 +671,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, active, searchNonce]);
+  }, [debouncedQuery, searchNonce]);
 
   // Helper — taruh di dalam komponen, sebelum JSX
   const handleToggleLayout = (toGrid: boolean) => {
@@ -994,7 +994,7 @@ export default function HomeScreen() {
             <TextInput
               value={queryInput}
               onChangeText={setQueryInput}
-              placeholder="Cari judul"
+              placeholder="Cari Komik"
               placeholderTextColor={colors.placeholder}
               style={{
                 flex: 1,

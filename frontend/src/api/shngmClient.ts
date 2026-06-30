@@ -219,7 +219,7 @@ export async function getMangaListByType(
   if (params.isUpdate) qs.set("is_update", "true");
   if (params.sort) qs.set("sort", params.sort);
   if (params.sortOrder) qs.set("sort_order", params.sortOrder);
-  if (params.query) qs.set("query", params.query);
+  if (params.query) qs.set("q", params.query);
   if (params.format) qs.set("format", params.format);
   if (params.status) qs.set("status", params.status);
   if (params.genre) qs.set("genre", params.genre);

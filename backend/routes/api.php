@@ -99,5 +99,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{mangaId}',         [CommentController::class, 'store']);
         Route::post('{commentId}/like',   [CommentController::class, 'like']);
         Route::post('{commentId}/reply',  [CommentController::class, 'storeReply']);
+        Route::delete('{commentId}',      [CommentController::class, 'destroy']);
     });
 });

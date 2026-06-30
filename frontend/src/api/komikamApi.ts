@@ -304,3 +304,9 @@ export async function apiReportComment(
 ): Promise<{ message: string; status: string }> {
   return request("POST", `/comments/${commentId}/report`);
 }
+
+export async function apiDeleteComment(
+  commentId: number,
+): Promise<{ message: string }> {
+  return request("DELETE", `/comments/${commentId}`);
+}

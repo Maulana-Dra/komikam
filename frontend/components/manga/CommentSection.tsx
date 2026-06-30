@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -21,6 +22,7 @@ import {
   apiPostComment,
   apiPostReply,
   apiLikeComment,
+  apiDeleteComment,
   type ApiComment,
 } from "@/src/api/komikamApi";
 
@@ -116,6 +118,8 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
   const [replyText, setReplyText] = React.useState("");
   const [submittingReply, setSubmittingReply] = React.useState(false);
   const [expandedCommentIds, setExpandedCommentIds] = React.useState<Record<number, boolean>>({});
+  const [menuTarget, setMenuTarget] = React.useState<{ id: number; parentId: number | null } | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<{ id: number; parentId: number | null } | null>(null);
 
   // Memoized target comment being replied to
   const targetComment = React.useMemo(() => {
@@ -230,6 +234,49 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
       setSubmitting(false);
     }
   }, [commentText, mangaId, sort, loadComments, submitting]);
+
+  const handleOpenMenu = React.useCallback((commentId: number, parentId: number | null) => {
+    setMenuTarget({ id: commentId, parentId });
+  }, []);
+
+  const handleMenuDeleteSelect = React.useCallback(() => {
+    if (!menuTarget) return;
+    setDeleteTarget(menuTarget);
+    setMenuTarget(null);
+  }, [menuTarget]);
+
+  const confirmDeleteComment = React.useCallback(async () => {
+    if (!deleteTarget) return;
+    const { id: commentId, parentId } = deleteTarget;
+    try {
+      await apiDeleteComment(commentId);
+      if (parentId === null) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+        setTotal((prev) => Math.max(0, prev - 1));
+      } else {
+        setComments((prev) =>
+          prev.map((c) => {
+            if (c.id === parentId) {
+              return {
+                ...c,
+                replies: c.replies?.filter((r) => r.id !== commentId) || [],
+              };
+            }
+            return c;
+          })
+        );
+      }
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : "Gagal menghapus komentar";
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert("Terjadi Kesalahan", msg);
+      }
+    } finally {
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
 
   const handleReplyPress = React.useCallback((comment: ApiComment) => {
     if (!profile) {
@@ -661,7 +708,22 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                       </View>
                     </View>
 
-                    {/* Report Action Button ditiadakan */}
+                    {/* Titik tiga icon untuk pemilik komentar */}
+                    {profile && item.user_id === profile.id ? (
+                      <Pressable
+                        onPress={() => handleOpenMenu(item.id, null)}
+                        style={({ pressed }) => ({
+                          padding: 6,
+                          opacity: pressed ? 0.6 : 1,
+                        })}
+                      >
+                        <Ionicons
+                          name="ellipsis-vertical"
+                          size={18}
+                          color={colors.subtext}
+                        />
+                      </Pressable>
+                    ) : null}
                   </View>
 
                   <Text style={[styles.commentContentText, { color: colors.text }]}>
@@ -780,7 +842,22 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
                               </View>
                             </View>
 
-                            {/* Report Action Button ditiadakan */}
+                            {/* Titik tiga icon untuk pemilik komentar balasan */}
+                            {profile && reply.user_id === profile.id ? (
+                              <Pressable
+                                onPress={() => handleOpenMenu(reply.id, item.id)}
+                                style={({ pressed }) => ({
+                                  padding: 6,
+                                  opacity: pressed ? 0.6 : 1,
+                                })}
+                              >
+                                <Ionicons
+                                  name="ellipsis-vertical"
+                                  size={18}
+                                  color={colors.subtext}
+                                />
+                              </Pressable>
+                            ) : null}
                           </View>
 
                           <Text style={[styles.commentContentText, { color: colors.text }]}>
@@ -949,6 +1026,92 @@ export default function CommentSection({ mangaId }: CommentSectionProps) {
           )}
         </View>
       )}
+
+      {/* ── Menu Aksi Komentar Modal ── */}
+      <Modal
+        visible={menuTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuTarget(null)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setMenuTarget(null)}
+        >
+          <View style={[styles.menuContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.menuTitle, { color: colors.subtext }]}>Pilih Aksi</Text>
+            
+            <Pressable
+              onPress={handleMenuDeleteSelect}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && { backgroundColor: isDark ? "rgba(255, 92, 92, 0.1)" : "rgba(211, 47, 47, 0.1)" }
+              ]}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              <Text style={[styles.menuItemText, { color: colors.danger }]}>Hapus Komentar</Text>
+            </Pressable>
+
+            <View style={[styles.menuDivider, { backgroundColor: colors.border }]} />
+
+            <Pressable
+              onPress={() => setMenuTarget(null)}
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && { backgroundColor: colors.border }
+              ]}
+            >
+              <Ionicons name="close-outline" size={20} color={colors.text} />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Batal</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Custom Centered Confirm Delete Modal ── */}
+      <Modal
+        visible={deleteTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.confirmContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.warningIconBg, { backgroundColor: isDark ? "rgba(255, 92, 92, 0.15)" : "rgba(211, 47, 47, 0.15)" }]}>
+              <Ionicons name="alert-circle" size={32} color={colors.danger} />
+            </View>
+
+            <Text style={[styles.confirmTitle, { color: colors.text }]}>Hapus Komentar?</Text>
+            <Text style={[styles.confirmDesc, { color: colors.subtext }]}>
+              Apakah Anda yakin ingin menghapus komentar ini? Tindakan ini tidak dapat dibatalkan.
+            </Text>
+
+            <View style={styles.confirmActionsRow}>
+              <Pressable
+                onPress={() => setDeleteTarget(null)}
+                style={({ pressed }) => [
+                  styles.confirmCancelBtn,
+                  { backgroundColor: isDark ? "#242434" : "#EFE6DA" },
+                  pressed && { opacity: 0.8 }
+                ]}
+              >
+                <Text style={[styles.confirmCancelBtnText, { color: colors.text }]}>Batal</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={confirmDeleteComment}
+                style={({ pressed }) => [
+                  styles.confirmDeleteBtn,
+                  { backgroundColor: colors.danger },
+                  pressed && { opacity: 0.8 }
+                ]}
+              >
+                <Text style={styles.confirmDeleteBtnText}>Hapus</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1209,6 +1372,110 @@ const styles = StyleSheet.create({
   },
   replyButtonText: {
     fontSize: 12,
+    fontWeight: "800",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  menuContainer: {
+    width: "100%",
+    maxWidth: 280,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  menuDivider: {
+    height: 1,
+    marginVertical: 4,
+  },
+  confirmContainer: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  warningIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmActionsRow: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmCancelBtnText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  confirmDeleteBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmDeleteBtnText: {
+    color: "#FFF",
+    fontSize: 15,
     fontWeight: "800",
   },
 });

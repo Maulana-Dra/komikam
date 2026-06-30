@@ -281,6 +281,30 @@ class CommentController extends Controller
     }
 
     /**
+     * DELETE /api/comments/{commentId}
+     * Delete a comment. Only the owner can delete it.
+     */
+    public function destroy(Request $request, int $commentId): JsonResponse
+    {
+        $comment = Comment::find($commentId);
+        if (!$comment) {
+            return response()->json(['message' => 'Komentar tidak ditemukan.'], 404);
+        }
+
+        if ($comment->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Anda tidak memiliki akses untuk menghapus komentar ini.'], 403);
+        }
+
+        // Soft delete dengan mengganti status ke 'deleted'
+        $comment->status = 'deleted';
+        $comment->save();
+
+        return response()->json([
+            'message' => 'Komentar berhasil dihapus.'
+        ]);
+    }
+
+    /**
      * Check if text contains profanity in Indonesian or English.
      */
     private function containsProfanity(?string $text): bool

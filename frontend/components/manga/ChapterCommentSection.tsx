@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
   useWindowDimensions,
+  Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -21,6 +22,7 @@ import {
   apiPostComment,
   apiPostReply,
   apiLikeComment,
+  apiDeleteComment,
   type ApiComment,
 } from "@/src/api/komikamApi";
 
@@ -140,6 +142,8 @@ export default function ChapterCommentSection({
   const [replyText, setReplyText] = React.useState("");
   const [submittingReply, setSubmittingReply] = React.useState(false);
   const [expandedIds, setExpandedIds] = React.useState<Record<number, boolean>>({});
+  const [menuTarget, setMenuTarget] = React.useState<{ id: number; parentId: number | null } | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<{ id: number; parentId: number | null } | null>(null);
 
   const targetComment = React.useMemo(() => {
     if (activeReplyId === null) return null;
@@ -232,6 +236,49 @@ export default function ChapterCommentSection({
       setSubmitting(false);
     }
   }, [commentText, mangaId, chapterId, sort, loadComments, submitting]);
+
+  const handleOpenMenu = React.useCallback((commentId: number, parentId: number | null) => {
+    setMenuTarget({ id: commentId, parentId });
+  }, []);
+
+  const handleMenuDeleteSelect = React.useCallback(() => {
+    if (!menuTarget) return;
+    setDeleteTarget(menuTarget);
+    setMenuTarget(null);
+  }, [menuTarget]);
+
+  const confirmDeleteComment = React.useCallback(async () => {
+    if (!deleteTarget) return;
+    const { id: commentId, parentId } = deleteTarget;
+    try {
+      await apiDeleteComment(commentId);
+      if (parentId === null) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+        setTotal((prev) => Math.max(0, prev - 1));
+      } else {
+        setComments((prev) =>
+          prev.map((c) => {
+            if (c.id === parentId) {
+              return {
+                ...c,
+                replies: c.replies?.filter((r) => r.id !== commentId) || [],
+              };
+            }
+            return c;
+          })
+        );
+      }
+    } catch (e: any) {
+      const msg = e instanceof Error ? e.message : "Gagal menghapus komentar";
+      if (Platform.OS === "web") {
+        window.alert(msg);
+      } else {
+        Alert.alert("Terjadi Kesalahan", msg);
+      }
+    } finally {
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
 
   const handleReplyPress = React.useCallback(
     (comment: ApiComment) => {
@@ -399,7 +446,7 @@ export default function ChapterCommentSection({
     </View>
   );
 
-  const renderComment = (item: ApiComment, isReply = false) => {
+  const renderComment = (item: ApiComment, isReply = false, parentId: number | null = null) => {
     const isFormActive = activeReplyId === item.id || (item.replies?.some((r) => r.id === activeReplyId) ?? false);
 
     return (
@@ -422,7 +469,22 @@ export default function ChapterCommentSection({
               </View>
             </View>
 
-
+            {/* Titik tiga icon untuk pemilik komentar */}
+            {profile && item.user_id === profile.id ? (
+              <Pressable
+                onPress={() => handleOpenMenu(item.id, parentId)}
+                style={({ pressed }) => ({
+                  padding: 6,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Ionicons
+                  name="ellipsis-vertical"
+                  size={16}
+                  color={colors.subtext}
+                />
+              </Pressable>
+            ) : null}
           </View>
 
           {/* Content */}
@@ -475,7 +537,7 @@ export default function ChapterCommentSection({
 
         {!isReply && (expandedIds[item.id] || isFormActive) && (
           <View style={[s.repliesContainer, { borderLeftColor: colors.border }]}>
-            {expandedIds[item.id] && item.replies?.map((reply) => renderComment(reply, true))}
+            {expandedIds[item.id] && item.replies?.map((reply) => renderComment(reply, true, item.id))}
 
             {/* Reply input form */}
             {isFormActive && (
@@ -664,7 +726,7 @@ export default function ChapterCommentSection({
           <View style={{ gap: 14 }}>
             {comments.map((item) => renderComment(item))}
 
-            {page < lastPage && comments.length < 100 ? (
+            {page < lastPage && comments.length < 100 && (
               <Pressable
                 onPress={() => void loadComments(page + 1)}
                 disabled={loadingMore}
@@ -679,15 +741,95 @@ export default function ChapterCommentSection({
                   <Text style={[s.loadMoreText, { color: colors.chipText }]}>Muat Lebih Banyak</Text>
                 )}
               </Pressable>
-            ) : (
-              comments.length >= 100 && (
-                <Text style={{ textAlign: "center", color: colors.subtext, fontSize: 12, marginTop: 10 }}>
-                  *Maksimal 100 ulasan yang ditampilkan
-                </Text>
-              )
             )}
           </View>
         )}
+
+      {/* ── Menu Aksi Komentar Modal ── */}
+      <Modal
+        visible={menuTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuTarget(null)}
+      >
+        <Pressable
+          style={s.modalOverlay}
+          onPress={() => setMenuTarget(null)}
+        >
+          <View style={[s.menuContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[s.menuTitle, { color: colors.subtext }]}>Pilih Aksi</Text>
+            
+            <Pressable
+              onPress={handleMenuDeleteSelect}
+              style={({ pressed }) => [
+                s.menuItem,
+                pressed && { backgroundColor: readerBg !== "white" ? "rgba(255, 92, 92, 0.1)" : "rgba(211, 47, 47, 0.1)" }
+              ]}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              <Text style={[s.menuItemText, { color: colors.danger }]}>Hapus Komentar</Text>
+            </Pressable>
+
+            <View style={[s.menuDivider, { backgroundColor: colors.border }]} />
+
+            <Pressable
+              onPress={() => setMenuTarget(null)}
+              style={({ pressed }) => [
+                s.menuItem,
+                pressed && { backgroundColor: colors.border }
+              ]}
+            >
+              <Ionicons name="close-outline" size={20} color={colors.text} />
+              <Text style={[s.menuItemText, { color: colors.text }]}>Batal</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Custom Centered Confirm Delete Modal ── */}
+      <Modal
+        visible={deleteTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteTarget(null)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={[s.confirmContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[s.warningIconBg, { backgroundColor: readerBg !== "white" ? "rgba(255, 92, 92, 0.15)" : "rgba(211, 47, 47, 0.15)" }]}>
+              <Ionicons name="alert-circle" size={32} color={colors.danger} />
+            </View>
+
+            <Text style={[s.confirmTitle, { color: colors.text }]}>Hapus Komentar?</Text>
+            <Text style={[s.confirmDesc, { color: colors.subtext }]}>
+              Apakah Anda yakin ingin menghapus komentar ini? Tindakan ini tidak dapat dibatalkan.
+            </Text>
+
+            <View style={s.confirmActionsRow}>
+              <Pressable
+                onPress={() => setDeleteTarget(null)}
+                style={({ pressed }) => [
+                  s.confirmCancelBtn,
+                  { backgroundColor: readerBg !== "white" ? "#242434" : "#EFE6DA" },
+                  pressed && { opacity: 0.8 }
+                ]}
+              >
+                <Text style={[s.confirmCancelBtnText, { color: colors.text }]}>Batal</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={confirmDeleteComment}
+                style={({ pressed }) => [
+                  s.confirmDeleteBtn,
+                  { backgroundColor: colors.danger },
+                  pressed && { opacity: 0.8 }
+                ]}
+              >
+                <Text style={s.confirmDeleteBtnText}>Hapus</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </Container>
     </View>
   );
@@ -939,6 +1081,110 @@ const s = StyleSheet.create({
   },
   loadMoreText: {
     fontSize: 13,
+    fontWeight: "800",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  menuContainer: {
+    width: "100%",
+    maxWidth: 280,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: 0.5,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  menuItemText: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  menuDivider: {
+    height: 1,
+    marginVertical: 4,
+  },
+  confirmContainer: {
+    width: "100%",
+    maxWidth: 320,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  warningIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  confirmActionsRow: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 12,
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmCancelBtnText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  confirmDeleteBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmDeleteBtnText: {
+    color: "#FFF",
+    fontSize: 15,
     fontWeight: "800",
   },
 });

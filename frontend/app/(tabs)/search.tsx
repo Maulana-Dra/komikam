@@ -702,24 +702,28 @@ export default function SearchScreen() {
   useEffect(() => {
     setPage(1);
     setHasMore(true);
-    // Don't clear rawItems here immediately to avoid full blank screen on every keystroke,
-    // let the loading state handle the UI, or you can clear it if you want.
-    
+    setRawItems([]); // clear hasil sebelumnya saat query/filter berubah
+
     const timer = setTimeout(() => {
       setLoading(true);
-      getMangaListByType({
-        page: 1,
-        pageSize: 48,
-        query: searchQuery || undefined,
-        format: selectedFormat as any,
-        status: selectedStatus as any,
-        genre:
-          selectedGenres.length > 0
-            ? selectedGenres[0].toLowerCase()
-            : undefined, // API accepts 1 genre max currently
-        sort: sortBy === "latest" ? "latest" : undefined,
-        sortOrder: "desc",
-      })
+      const hasQuery = !!searchQuery;
+      getMangaListByType(
+        {
+          page: 1,
+          pageSize: 48,
+          query: searchQuery || undefined,
+          format: selectedFormat as any,
+          status: selectedStatus as any,
+          genre:
+            selectedGenres.length > 0
+              ? selectedGenres[0].toLowerCase()
+              : undefined,
+          // Jangan kirim sort saat ada query — bisa mengganggu filter API
+          sort: hasQuery ? undefined : (sortBy === "latest" ? "latest" : undefined),
+          sortOrder: hasQuery ? undefined : "desc",
+        },
+        { cacheMode: "no-cache" }, // selalu ambil data segar
+      )
         .then((res) => {
           setRawItems(res.data);
           setHasMore(res.data.length >= 48);
@@ -734,24 +738,27 @@ export default function SearchScreen() {
     if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
     const nextPage = page + 1;
-    
-    getMangaListByType({
-      page: nextPage,
-      pageSize: 20, // Load 20 on subsequent scrolls
-      query: searchQuery || undefined,
-      format: selectedFormat as any,
-      status: selectedStatus as any,
-      genre:
-        selectedGenres.length > 0
-          ? selectedGenres[0].toLowerCase()
-          : undefined,
-      sort: sortBy === "latest" ? "latest" : undefined,
-      sortOrder: "desc",
-    })
+    const hasQuery = !!searchQuery;
+
+    getMangaListByType(
+      {
+        page: nextPage,
+        pageSize: 20,
+        query: searchQuery || undefined,
+        format: selectedFormat as any,
+        status: selectedStatus as any,
+        genre:
+          selectedGenres.length > 0
+            ? selectedGenres[0].toLowerCase()
+            : undefined,
+        sort: hasQuery ? undefined : (sortBy === "latest" ? "latest" : undefined),
+        sortOrder: hasQuery ? undefined : "desc",
+      },
+      { cacheMode: "no-cache" },
+    )
       .then((res) => {
         if (res.data.length > 0) {
           setRawItems((prev) => {
-            // merge unique to prevent duplicates if API is weird
             const map = new Map<string, ShngmManga>();
             for (const it of prev) map.set(it.manga_id, it);
             for (const it of res.data) map.set(it.manga_id, it);
@@ -769,17 +776,21 @@ export default function SearchScreen() {
     setRefreshing(true);
     setPage(1);
     setHasMore(true);
-    getMangaListByType({
-      page: 1,
-      pageSize: 48,
-      query: searchQuery || undefined,
-      format: selectedFormat as any,
-      status: selectedStatus as any,
-      genre:
-        selectedGenres.length > 0 ? selectedGenres[0].toLowerCase() : undefined,
-      sort: sortBy === "latest" ? "latest" : undefined,
-      sortOrder: "desc",
-    })
+    const hasQuery = !!searchQuery;
+    getMangaListByType(
+      {
+        page: 1,
+        pageSize: 48,
+        query: searchQuery || undefined,
+        format: selectedFormat as any,
+        status: selectedStatus as any,
+        genre:
+          selectedGenres.length > 0 ? selectedGenres[0].toLowerCase() : undefined,
+        sort: hasQuery ? undefined : (sortBy === "latest" ? "latest" : undefined),
+        sortOrder: hasQuery ? undefined : "desc",
+      },
+      { cacheMode: "no-cache" },
+    )
       .then((res) => {
         setRawItems(res.data);
         setHasMore(res.data.length >= 48);
@@ -788,8 +799,16 @@ export default function SearchScreen() {
       .finally(() => setRefreshing(false));
   }, [searchQuery, selectedFormat, selectedStatus, selectedGenres, sortBy]);
 
-  // derived: sort client-side
-  const items = useMemo(() => sortItems(rawItems, sortBy), [rawItems, sortBy]);
+  // derived: filter and sort client-side to ensure query matches only title
+  const items = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = q
+      ? rawItems.filter((item) => {
+          return item.title?.toLowerCase().includes(q);
+        })
+      : rawItems;
+    return sortItems(filtered, sortBy);
+  }, [rawItems, searchQuery, sortBy]);
 
   const groupedData = useMemo(() => {
     if (columns === 1) {
