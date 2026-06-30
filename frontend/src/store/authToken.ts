@@ -2,8 +2,8 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
-const TOKEN_KEY = "komikam:api_token:v1";
-const USER_KEY  = "komikam:api_user:v1";
+const TOKEN_KEY = "komikam_api_token_v1";
+const USER_KEY  = "komikam_api_user_v1";
 
 export type ApiUser = {
   id: number;
