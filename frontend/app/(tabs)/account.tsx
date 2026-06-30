@@ -2,7 +2,7 @@ import React from "react";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Platform,
   Pressable,
   TextInput,
@@ -85,6 +85,7 @@ export default function AccountScreen() {
   const [historyCount, setHistoryCount] = React.useState(0);
   const [bookmarkCount, setBookmarkCount] = React.useState(0);
   const [latestProgress, setLatestProgress] = React.useState<any | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   // ── Load ─────────────────────────────────────────────────────────────────
   const load = React.useCallback(async () => {
@@ -173,32 +174,16 @@ export default function AccountScreen() {
     }
   }, [authMode, name, email, password, setHistoryCount, setBookmarkCount, setLatestProgress]);
 
-  const handleSignOut = React.useCallback(() => {
-    const performSignOut = async () => {
-      setSubmitting(true);
-      try {
-        await signOut();
-        setProfile(null);
-        showMessage("Berhasil keluar.", false);
-      } finally {
-        setSubmitting(false);
-      }
-    };
-
-    if (Platform.OS === "web") {
-      const confirmOut = window.confirm("Kamu akan logout dari akun ini. Lanjutkan?");
-      if (confirmOut) {
-        void performSignOut();
-      }
-    } else {
-      Alert.alert("Keluar akun?", "Kamu akan logout dari akun ini.", [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Keluar",
-          style: "destructive",
-          onPress: performSignOut,
-        },
-      ]);
+  const handleSignOut = React.useCallback(async () => {
+    setSubmitting(true);
+    try {
+      await signOut();
+      setProfile(null);
+      showMessage("Berhasil keluar.", false);
+    } catch (e: any) {
+      showMessage(e instanceof Error ? e.message : "Gagal keluar akun.", true);
+    } finally {
+      setSubmitting(false);
     }
   }, []);
 
@@ -235,8 +220,9 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bg }}
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bg }}
       contentContainerStyle={{
         padding: 16,
         paddingTop: insets.top + 12,
@@ -417,6 +403,18 @@ export default function AccountScreen() {
               </Text>
             )}
           </Pressable>
+          {authMode === "register" && (
+            <Text style={{ textAlign: "center", color: colors.subtext, fontSize: 11, lineHeight: 16, marginTop: 8 }}>
+              Dengan mendaftar, Anda menyetujui{" "}
+              <Text 
+                onPress={() => router.push("/privacy" as any)} 
+                style={{ color: colors.accent, fontWeight: "700", textDecorationLine: "underline" }}
+              >
+                Kebijakan Privasi
+              </Text>{" "}
+              kami.
+            </Text>
+          )}
         </View>
       ) : (
         /* ── Sudah Login ──────────────────────────────────────────────────── */
@@ -489,7 +487,7 @@ export default function AccountScreen() {
             </Pressable>
 
             <Pressable
-              onPress={handleSignOut}
+              onPress={() => setShowLogoutConfirm(true)}
               disabled={submitting}
               style={({ pressed }) => ({
                 flex: 1,
@@ -788,8 +786,130 @@ export default function AccountScreen() {
         <Text style={{ color: colors.subtext, fontSize: 11 }}>
           Versi {pkg.version} (Build 2026.04)
         </Text>
+        <Pressable
+          onPress={() => router.push("/privacy" as any)}
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.6 : 1,
+            marginTop: 4,
+            paddingVertical: 4,
+          })}
+        >
+          <Text style={{ color: colors.accent, fontWeight: "700", fontSize: 12, textDecorationLine: "underline" }}>
+            Kebijakan Privasi
+          </Text>
+        </Pressable>
       </View>
     </ScrollView>
+
+    {/* ── Custom Centered Confirm Logout Modal ── */}
+    <Modal
+      visible={showLogoutConfirm}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowLogoutConfirm(false)}
+    >
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 24,
+        }}
+      >
+        <View
+          style={{
+            width: "100%",
+            maxWidth: 320,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            padding: 24,
+            alignItems: "center",
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.35,
+            shadowRadius: 10,
+            elevation: 10,
+          }}
+        >
+          <View
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              justifyContent: "center",
+              alignItems: "center",
+              marginBottom: 16,
+              backgroundColor: isDark ? "rgba(255, 92, 92, 0.15)" : "rgba(211, 47, 47, 0.15)",
+            }}
+          >
+            <Ionicons name="log-out" size={32} color={colors.danger || "#FF5C5C"} />
+          </View>
+
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "900",
+              color: colors.text,
+              marginBottom: 8,
+              textAlign: "center",
+            }}
+          >
+            Keluar Akun?
+          </Text>
+          
+          <Text
+            style={{
+              fontSize: 14,
+              color: colors.subtext,
+              textAlign: "center",
+              lineHeight: 20,
+              marginBottom: 24,
+            }}
+          >
+            Kamu akan keluar dari akun ini. Bookmark dan riwayat membaca tidak akan disinkronisasikan lagi ke server cloud.
+          </Text>
+
+          <View style={{ flexDirection: "row", width: "100%", gap: 12 }}>
+            <Pressable
+              onPress={() => setShowLogoutConfirm(false)}
+              style={({ pressed }) => ({
+                flex: 1,
+                height: 48,
+                borderRadius: 12,
+                justifyContent: "center",
+                alignItems: "center",
+                backgroundColor: isDark ? "#242434" : "#EFE6DA",
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text }}>Batal</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={async () => {
+                setShowLogoutConfirm(false);
+                await handleSignOut();
+              }}
+              style={({ pressed }) => ({
+                flex: 1,
+                height: 48,
+                borderRadius: 12,
+                justifyContent: "center",
+                alignItems: "center",
+                backgroundColor: colors.danger || "#FF5C5C",
+                opacity: pressed ? 0.8 : 1,
+              })}
+            >
+              <Text style={{ color: "#FFF", fontSize: 15, fontWeight: "800" }}>Keluar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  </>
   );
 }
 

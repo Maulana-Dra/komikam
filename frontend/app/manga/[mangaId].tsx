@@ -6,12 +6,12 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   TextInput,
   View,
   useWindowDimensions,
-  Alert,
   Platform
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -113,6 +113,21 @@ export default function MangaDetailScreen() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [firstChapter, setFirstChapter] = React.useState<ShngmChapter | null>(null);
 
+  const [customAlert, setCustomAlert] = React.useState<{
+    visible: boolean;
+    title: string;
+    description: string;
+    type?: "info" | "confirm" | "error";
+    onConfirm?: () => void;
+  } | null>(null);
+
+  const showAlert = React.useCallback(
+    (title: string, description: string, type: "info" | "confirm" | "error" = "info", onConfirm?: () => void) => {
+      setCustomAlert({ visible: true, title, description, type, onConfirm });
+    },
+    []
+  );
+
   const shimmer = React.useRef(new Animated.Value(0)).current;
   const SHIMMER_WIDTH = 140;
 
@@ -205,28 +220,22 @@ export default function MangaDetailScreen() {
 
     const token = await getToken();
     if (!token) {
-      Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk mengunduh chapter.");
+      showAlert("Perlu Login", "Silakan login terlebih dahulu untuk mengunduh chapter.", "info");
       return;
     }
 
     const isDownloaded = downloadedChapters[chapterId];
 
     if (isDownloaded) {
-      Alert.alert(
+      showAlert(
         "Hapus Unduhan?",
         "Apakah Anda yakin ingin menghapus chapter ini dari penyimpanan lokal?",
-        [
-          { text: "Batal", style: "cancel" },
-          {
-            text: "Hapus",
-            style: "destructive",
-            onPress: async () => {
-              await deleteDownloadedChapter(id, chapterId);
-              setDownloadedChapters(prev => ({ ...prev, [chapterId]: false }));
-              setToast("Unduhan dihapus");
-            }
-          }
-        ]
+        "confirm",
+        async () => {
+          await deleteDownloadedChapter(id, chapterId);
+          setDownloadedChapters(prev => ({ ...prev, [chapterId]: false }));
+          setToast("Unduhan dihapus");
+        }
       );
     } else {
       try {
@@ -239,7 +248,7 @@ export default function MangaDetailScreen() {
         setDownloadedChapters(prev => ({ ...prev, [chapterId]: true }));
         setToast("Unduhan selesai!");
       } catch (err) {
-        Alert.alert("Gagal Mengunduh", err instanceof Error ? err.message : "Kesalahan tidak dikenal");
+        showAlert("Gagal Mengunduh", err instanceof Error ? err.message : "Kesalahan tidak dikenal", "error");
       } finally {
         setDownloadProgress(prev => {
           const next = { ...prev };
@@ -248,7 +257,7 @@ export default function MangaDetailScreen() {
         });
       }
     }
-  }, [id, downloadedChapters, title, coverUrl, mangaDetail]);
+  }, [id, downloadedChapters, title, coverUrl, mangaDetail, showAlert]);
 
   const [chapterOffset, setChapterOffset] = React.useState(0);
 
@@ -971,11 +980,7 @@ export default function MangaDetailScreen() {
                 if (!id) return;
                 const token = await getToken();
                 if (!token) {
-                  if (Platform.OS === "web") {
-                    window.alert("Silakan login terlebih dahulu untuk menggunakan fitur Bookmark.");
-                  } else {
-                    Alert.alert("Perlu Login", "Silakan login terlebih dahulu untuk menggunakan fitur Bookmark.");
-                  }
+                  showAlert("Perlu Login", "Silakan login terlebih dahulu untuk menggunakan fitur Bookmark.", "info");
                   return;
                 }
                 const cover = displayCover;
@@ -1614,6 +1619,166 @@ export default function MangaDetailScreen() {
             )}
           </View>
         </View>
+      )}
+
+      {/* ── Custom Alert Modal ── */}
+      {customAlert?.visible && (
+        <Modal
+          visible={customAlert.visible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCustomAlert(null)}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 24,
+            }}
+          >
+            <View
+              style={{
+                width: "100%",
+                maxWidth: 320,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                padding: 24,
+                alignItems: "center",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.35,
+                shadowRadius: 10,
+                elevation: 10,
+              }}
+            >
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  marginBottom: 16,
+                  backgroundColor:
+                    customAlert.type === "error"
+                      ? isDark ? "rgba(255, 92, 92, 0.15)" : "rgba(211, 47, 47, 0.15)"
+                      : customAlert.type === "confirm"
+                      ? isDark ? "rgba(255, 179, 0, 0.15)" : "rgba(245, 124, 0, 0.15)"
+                      : isDark ? "rgba(74, 143, 226, 0.15)" : "rgba(0, 91, 181, 0.15)",
+                }}
+              >
+                <Ionicons
+                  name={
+                    customAlert.type === "error"
+                      ? "alert-circle"
+                      : customAlert.type === "confirm"
+                      ? "help-circle"
+                      : "information-circle"
+                  }
+                  size={32}
+                  color={
+                    customAlert.type === "error"
+                      ? "#FF5C5C"
+                      : customAlert.type === "confirm"
+                      ? "#FFB300"
+                      : colors.primary || "#4A8FE2"
+                  }
+                />
+              </View>
+
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "900",
+                  color: colors.text,
+                  marginBottom: 8,
+                  textAlign: "center",
+                }}
+              >
+                {customAlert.title}
+              </Text>
+              
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: colors.subtext,
+                  textAlign: "center",
+                  lineHeight: 20,
+                  marginBottom: 24,
+                }}
+              >
+                {customAlert.description}
+              </Text>
+
+              <View style={{ flexDirection: "row", width: "100%", gap: 12 }}>
+                {customAlert.type === "confirm" ? (
+                  <>
+                    <Pressable
+                      onPress={() => setCustomAlert(null)}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        height: 48,
+                        borderRadius: 12,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: isDark ? "#242434" : "#EFE6DA",
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text }}>Batal</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => {
+                        const onConfirm = customAlert.onConfirm;
+                        setCustomAlert(null);
+                        if (onConfirm) onConfirm();
+                      }}
+                      style={({ pressed }) => ({
+                        flex: 1,
+                        height: 48,
+                        borderRadius: 12,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: "#FF5C5C",
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <Text style={{ color: "#FFF", fontSize: 15, fontWeight: "800" }}>Hapus</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable
+                    onPress={() => setCustomAlert(null)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      height: 48,
+                      borderRadius: 12,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      backgroundColor: colors.primary || "#4A8FE2",
+                      opacity: pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "800",
+                        color: colors.primaryText || "#FFF",
+                      }}
+                    >
+                      Mengerti
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </View>
   );

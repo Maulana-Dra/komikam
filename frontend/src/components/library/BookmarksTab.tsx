@@ -3,7 +3,7 @@ import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, View, useWindowDimensions, Platform } from "react-native";
+import { ActivityIndicator, Modal, FlatList, Pressable, View, useWindowDimensions, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/ui/app-text";
 import { useAppTheme } from "@/src/theme/ThemeContext";
@@ -41,6 +41,13 @@ export function BookmarksTab() {
   const [updatesLoading, setUpdatesLoading] = React.useState<boolean>(true);
   const [checkingUpdates, setCheckingUpdates] = React.useState<boolean>(false);
   const [updatesMsg, setUpdatesMsg] = React.useState<string | null>(null);
+
+  const [customConfirm, setCustomConfirm] = React.useState<{
+    visible: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const load = React.useCallback(async (opts?: { silent?: boolean }) => {
     if (opts?.silent) {
@@ -89,48 +96,36 @@ export function BookmarksTab() {
 
   const handleRemove = React.useCallback(
     (item: BookmarkItem) => {
-      const doDelete = async () => {
-        await removeBookmark(item.mangaId);
-        setItems((prev) => prev.filter((x) => x.mangaId !== item.mangaId));
-      };
-
-      if (Platform.OS === "web") {
-        if (window.confirm(`Hapus bookmark?\n${item.title}`)) {
-          doDelete();
-        }
-      } else {
-        Alert.alert("Hapus bookmark?", item.title, [
-          { text: "Batal", style: "cancel" },
-          { text: "Hapus", style: "destructive", onPress: () => { doDelete(); } },
-        ]);
-      }
+      setCustomConfirm({
+        visible: true,
+        title: "Hapus Markah?",
+        description: `Apakah Anda yakin ingin menghapus "${item.title}" dari markah?`,
+        onConfirm: async () => {
+          await removeBookmark(item.mangaId);
+          setItems((prev) => prev.filter((x) => x.mangaId !== item.mangaId));
+        },
+      });
     },
     [setItems]
   );
 
   const handleClearAll = React.useCallback(() => {
-    const doClear = async () => {
-      await clearBookmarks();
-      setItems([]);
-    };
-
-    if (Platform.OS === "web") {
-      if (window.confirm("Hapus semua bookmark?\nTindakan ini tidak bisa dibatalkan.")) {
-        doClear();
-      }
-    } else {
-      Alert.alert("Hapus semua bookmark?", "Tindakan ini tidak bisa dibatalkan.", [
-        { text: "Batal", style: "cancel" },
-        { text: "Hapus semua", style: "destructive", onPress: () => { doClear(); } },
-      ]);
-    }
+    setCustomConfirm({
+      visible: true,
+      title: "Hapus Semua Markah?",
+      description: "Apakah Anda yakin ingin menghapus semua markah? Tindakan ini tidak bisa dibatalkan.",
+      onConfirm: async () => {
+        await clearBookmarks();
+        setItems([]);
+      },
+    });
   }, []);
 
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.subtext} />
-        <Text style={{ marginTop: 8, color: colors.subtext }}>Memuat bookmark...</Text>
+        <Text style={{ marginTop: 8, color: colors.subtext }}>Memuat markah...</Text>
       </View>
     );
   }
@@ -162,7 +157,7 @@ export function BookmarksTab() {
             textAlign: "center",
           }}
         >
-          Belum ada bookmark
+          Belum ada markah
         </Text>
         <Text
           style={{
@@ -193,7 +188,8 @@ export function BookmarksTab() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <>
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <FlatList
         data={items}
         keyExtractor={(it) => it.mangaId}
@@ -399,5 +395,118 @@ export function BookmarksTab() {
         )}
       />
     </View>
+
+    {/* ── Custom Confirm Modal ── */}
+    {customConfirm?.visible && (
+      <Modal
+        visible={customConfirm.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCustomConfirm(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.card,
+              padding: 24,
+              alignItems: "center",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.35,
+              shadowRadius: 10,
+              elevation: 10,
+            }}
+          >
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                justifyContent: "center",
+                alignItems: "center",
+                marginBottom: 16,
+                backgroundColor: isDark ? "rgba(255, 92, 92, 0.15)" : "rgba(211, 47, 47, 0.15)",
+              }}
+            >
+              <Ionicons name="trash-outline" size={32} color={colors.danger} />
+            </View>
+
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "900",
+                color: colors.text,
+                marginBottom: 8,
+                textAlign: "center",
+              }}
+            >
+              {customConfirm.title}
+            </Text>
+            
+            <Text
+              style={{
+                fontSize: 14,
+                color: colors.subtext,
+                textAlign: "center",
+                lineHeight: 20,
+                marginBottom: 24,
+              }}
+            >
+              {customConfirm.description}
+            </Text>
+
+            <View style={{ flexDirection: "row", width: "100%", gap: 12 }}>
+              <Pressable
+                onPress={() => setCustomConfirm(null)}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  height: 48,
+                  borderRadius: 12,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: isDark ? "#242434" : "#EFE6DA",
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text }}>Batal</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  const onConfirm = customConfirm.onConfirm;
+                  setCustomConfirm(null);
+                  if (onConfirm) onConfirm();
+                }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  height: 48,
+                  borderRadius: 12,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: colors.danger,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Text style={{ color: "#FFF", fontSize: 15, fontWeight: "800" }}>Hapus</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    )}
+  </>
   );
 }
