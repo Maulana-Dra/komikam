@@ -810,7 +810,16 @@ export default function MangaDetailScreen() {
         />
         
         {/* Floating Nav Bar (Back & Home buttons centered on wide viewport) */}
-        <View style={{ position: "absolute", top: 16, left: 0, right: 0, alignItems: "center", zIndex: 12 }}>
+        <View 
+          style={{ 
+            position: "absolute", 
+            top: Platform.OS === 'android' ? Math.max(insets.top, 24) + 12 : Math.max(insets.top, 20) + 8, 
+            left: 0, 
+            right: 0, 
+            alignItems: "center", 
+            zIndex: 12 
+          }}
+        >
           <View style={{ width: "100%", maxWidth: 1000, flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: contentPadding }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <Pressable

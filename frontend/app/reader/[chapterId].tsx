@@ -990,7 +990,7 @@ export default function ReaderScreen() {
       {controlsVisible && (
         <View
           style={{
-            paddingTop: insets.top + (Platform.OS === "android" ? 4 : 0),
+            paddingTop: Platform.OS === "android" ? Math.max(insets.top, 24) + 8 : insets.top + 6,
             paddingBottom: 10,
             paddingHorizontal: 14,
             backgroundColor: "rgba(12,12,18,0.97)",
@@ -1073,7 +1073,7 @@ export default function ReaderScreen() {
             hitSlop={12}
             style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}
           >
-            <Ionicons name="home-outline" size={21} color="#F2F2F7" />
+            <Ionicons name="home-outline" size={22} color="#F2F2F7" />
           </Pressable>
         </View>
       )}
