@@ -28,6 +28,7 @@ import {
 } from "@/src/store/readerSettings";
 import { KomikamApiError } from "@/src/api/komikamApi";
 import { router } from "expo-router";
+import pkg from "../../package.json";
 import { getAllHistory } from "@/src/store/history";
 import { getBookmarks } from "@/src/store/bookmarks";
 
@@ -785,7 +786,7 @@ export default function AccountScreen() {
           KomiKam
         </Text>
         <Text style={{ color: colors.subtext, fontSize: 11 }}>
-          Versi 1.0.0 (Build 2026.04)
+          Versi {pkg.version} (Build 2026.04)
         </Text>
       </View>
     </ScrollView>
