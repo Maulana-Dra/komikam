@@ -283,7 +283,14 @@ export default function HomeScreen() {
 
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(queryInput), 300);
+    const q = queryInput.trim();
+    const t = setTimeout(() => {
+      if (q.length >= 3) {
+        setDebouncedQuery(q);
+      } else {
+        setDebouncedQuery("");
+      }
+    }, 300);
     return () => clearTimeout(t);
   }, [queryInput]);
 
@@ -1015,6 +1022,11 @@ export default function HomeScreen() {
               </Pressable>
             ) : null}
           </View>
+          {queryInput.trim().length > 0 && queryInput.trim().length < 3 && (
+            <Text style={{ color: isDark ? "#FF5C5C" : "#D32F2F", fontSize: 11, fontWeight: "700", marginTop: 4, marginLeft: 4 }}>
+              Ketik minimal 3 karakter untuk mencari...
+            </Text>
+          )}
         </View>
 
         {/* Segmented controls (theme toggles / offline badge) */}

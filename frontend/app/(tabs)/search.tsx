@@ -706,12 +706,13 @@ export default function SearchScreen() {
 
     const timer = setTimeout(() => {
       setLoading(true);
-      const hasQuery = !!searchQuery;
+      const q = searchQuery.trim();
+      const hasQuery = q.length >= 3;
       getMangaListByType(
         {
           page: 1,
           pageSize: 48,
-          query: searchQuery || undefined,
+          query: hasQuery ? q : undefined,
           format: selectedFormat as any,
           status: selectedStatus as any,
           genre:
@@ -738,13 +739,14 @@ export default function SearchScreen() {
     if (loading || loadingMore || !hasMore) return;
     setLoadingMore(true);
     const nextPage = page + 1;
-    const hasQuery = !!searchQuery;
+    const q = searchQuery.trim();
+    const hasQuery = q.length >= 3;
 
     getMangaListByType(
       {
         page: nextPage,
         pageSize: 20,
-        query: searchQuery || undefined,
+        query: hasQuery ? q : undefined,
         format: selectedFormat as any,
         status: selectedStatus as any,
         genre:
@@ -776,12 +778,13 @@ export default function SearchScreen() {
     setRefreshing(true);
     setPage(1);
     setHasMore(true);
-    const hasQuery = !!searchQuery;
+    const q = searchQuery.trim();
+    const hasQuery = q.length >= 3;
     getMangaListByType(
       {
         page: 1,
         pageSize: 48,
-        query: searchQuery || undefined,
+        query: hasQuery ? q : undefined,
         format: selectedFormat as any,
         status: selectedStatus as any,
         genre:
@@ -802,7 +805,7 @@ export default function SearchScreen() {
   // derived: filter and sort client-side to ensure query matches only title
   const items = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const filtered = q
+    const filtered = q.length >= 3
       ? rawItems.filter((item) => {
           return item.title?.toLowerCase().includes(q);
         })
@@ -952,7 +955,7 @@ export default function SearchScreen() {
         <View
           style={{
             position: "absolute",
-            top: 70 + insets.top, // Adjust top using insets.top
+            top: 68 + insets.top, // Adjust top using insets.top
             left: !isDesktop ? 54 : 12,
             right: !isDesktop ? 12 : 150,
             backgroundColor: colors.card,
@@ -969,7 +972,11 @@ export default function SearchScreen() {
             overflow: "hidden"
           }}
         >
-          {loading ? (
+          {searchQuery.trim().length < 3 ? (
+            <View style={{ padding: 16, alignItems: 'center' }}>
+              <Text style={{ color: colors.subtext, fontSize: 15, fontWeight: "600" }}>Ketik minimal 3 karakter...</Text>
+            </View>
+          ) : loading ? (
             <View style={{ padding: 16, alignItems: 'center' }}>
               <Text style={{ color: colors.subtext }}>Mencari...</Text>
             </View>
