@@ -11,14 +11,18 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "credentialsSource": "local"
       }, 
       "env": {
         "EXPO_PUBLIC_KOMIKAM_API_URL": "https://komikam.sir-l.web.id"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": {

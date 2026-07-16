@@ -8,3 +8,4 @@ expo-env.d.ts
 # Android Release Signing — JANGAN di-commit ke git!
 android/app/komikam-release.keystore
 android/gradle.properties
+credentials.json
